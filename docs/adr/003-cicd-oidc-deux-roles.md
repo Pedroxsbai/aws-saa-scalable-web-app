@@ -107,6 +107,58 @@ production.
 propriétaire du projet : la review de PR est déjà le point de contrôle
 humain ; en ajouter un second dilue la responsabilité sans réduire le risque.
 
+## Ce que la validation locale n'a pas détecté
+
+`terraform validate` et un `plan`/`apply` local ne testent que la syntaxe et
+la cohérence des références entre ressources — jamais les permissions IAM
+réelles, puisque l'opérateur local (`devops-admin`) a tous les droits sur le
+compte. Le premier run réel de chaque rôle CI a donc servi de test
+d'intégration à part entière, et a immédiatement révélé cinq lacunes
+invisibles jusque-là :
+
+1. **Le `sub` OIDC réel n'est pas `repo:owner/repo:...`.** Documenté partout
+   comme tel, y compris dans la documentation GitHub citée en référence —
+   mais le token émis pour ce compte inclut les identifiants numériques
+   immuables du propriétaire et du dépôt :
+   `repo:owner@owner_id/repo@repo_id:ref:refs/heads/main`. Découvert en
+   inspectant le champ `userIdentity.principalId` d'un événement CloudTrail
+   `AssumeRoleWithWebIdentity` refusé — la seule façon de voir la valeur
+   réelle envoyée par GitHub. Corrigé en `StringLike` avec un wildcard sur
+   la partie identifiant plutôt qu'un match exact sur le nom.
+2. **`iam:ListOpenIDConnectProviders` et `iam:ListRoles` refusent tout
+   scoping par ressource.** Ce sont des actions qui énumèrent le compte par
+   construction ; IAM exige `Resource = "*"` même si on ne s'intéresse qu'à
+   un provider ou un rôle précis. Les scoper sur un ARN exact ne produit pas
+   une erreur à l'écriture de la politique, mais un refus silencieux à
+   l'exécution.
+3. **La nomenclature des actions IAM S3 est incohérente.** `s3:GetBucketVersioning`
+   contient « Bucket », `s3:GetAccelerateConfiguration` non — sans logique
+   apparente. Une liste d'actions nommées une à une se fait contourner par
+   la moindre action interne non anticipée qu'appelle le provider AWS lors
+   du rafraîchissement d'un `aws_s3_bucket` (accélération, réplication,
+   politique de requête...). Remplacé par des wildcards `s3:Get*` / `s3:Put*`
+   scopés au préfixe du projet plutôt que par une énumération fragile.
+4. **`iam:UpdateAssumeRolePolicy` ≠ `iam:UpdateRole`.** Deux actions IAM
+   distinctes ; seule la première permet de modifier le document de
+   confiance d'un rôle. Sans elle, le rôle `apply` ne pouvait pas mettre à
+   jour son propre document de confiance ni celui du rôle `plan` — révélé en
+   laissant le pipeline appliquer sa propre correction du point 1.
+5. **`budgets:ListTagsForResource` n'a pas d'équivalent `Describe*`.**
+   Contrairement à la plupart des services où les tags se lisent via
+   l'action `Describe*` générique déjà accordée, AWS Budgets exige une
+   action dédiée, à ajouter explicitement.
+
+Une collision de verrou DynamoDB transitoire (`ConditionalCheckFailedException`)
+est également apparue une fois, deux workflows ayant tenté d'acquérir le
+lock à quelques secondes d'intervalle — comportement normal du mécanisme de
+verrouillage, pas un bug : un simple nouveau run après libération du lock a
+suffi.
+
+Chacune de ces cinq lacunes a été corrigée, réappliquée localement pour ne
+pas laisser le compte dans un état intermédiaire, puis vérifiée par un
+nouveau run réel avant de passer à la suivante — jamais corrigée « à
+l'aveugle » sans confirmation.
+
 ## Conséquences
 
 ### Positives

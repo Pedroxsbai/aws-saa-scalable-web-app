@@ -5,13 +5,17 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 5 sur ~5 — infrastructure et CI/CD déployés.** Les 5
-modules applicatifs tournent sur AWS en `eu-west-1` (VPC, ALB, ASG, RDS,
-S3, SNS, alarmes, budget), et la CI/CD GitHub Actions par OIDC est en place
-et testée de bout en bout : deux rôles IAM séparés par privilège (lecture
-seule sur PR, lecture/écriture sur push `main`), aucune clé longue durée.
-Détail dans [ADR-003](docs/adr/003-cicd-oidc-deux-roles.md). Reste
-l'application ASP.NET Core, qui remplace le stub de test actuel.
+**Statut : session 5 sur ~5 — infrastructure et CI/CD déployés et testés en
+conditions réelles.** Les 5 modules applicatifs tournent sur AWS en
+`eu-west-1` (VPC, ALB, ASG, RDS, S3, SNS, alarmes, budget). La CI/CD GitHub
+Actions par OIDC est en place, avec deux rôles IAM séparés par privilège
+(lecture seule sur PR, lecture/écriture sur push `main`), aucune clé longue
+durée — **et réellement vérifiée** : `apply.yml` a tourné avec succès sur un
+vrai push sur `main`, `plan.yml` sur une vraie pull request de test. Cinq
+lacunes de scoping IAM, invisibles en local, n'ont été découvertes que par
+ces runs réels et sont documentées telles quelles dans
+[ADR-003](docs/adr/003-cicd-oidc-deux-roles.md). Reste l'application
+ASP.NET Core, qui remplace le stub de test actuel.
 
 **Pourquoi `eu-west-1` et pas `eu-west-3` :** le compte AWS utilisé est en
 "Free Plan", qui plafonne le nombre d'instances RDS **par région**,
