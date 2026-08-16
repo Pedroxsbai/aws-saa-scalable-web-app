@@ -58,7 +58,7 @@ l'AZ `b` traversent l'AZ `a` pour sortir. Perdre l'AZ `a` leur coupe Internet.
 
 ### `instance`
 
-Une EC2 `t4g.micro` sous Amazon Linux 2023 ARM, qui :
+Une EC2 `t3.micro` sous Amazon Linux 2023 x86_64, qui :
 
 - désactive `source_dest_check` — sans quoi le VPC jette les paquets qu'elle
   est censée router ;
@@ -142,7 +142,7 @@ facturés à l'ingestion et se remplissent vite. À activer ponctuellement, puis
 | `private_data_subnet_cidrs` | list(string) | — | un CIDR par AZ |
 | `nat_mode` | string | — | `gateway` \| `instance` \| `endpoints` |
 | `nat_high_availability` | bool | `false` | un NAT par AZ |
-| `nat_instance_type` | string | `t4g.micro` | famille ARM, éligible free tier obligatoire |
+| `nat_instance_type` | string | `t3.micro` | famille x86_64, éligible free tier obligatoire |
 | `enable_ssm_endpoints` | bool | `false` | endpoints SSM malgré un NAT |
 | `app_port` | number | `8080` | port applicatif |
 | `alb_ingress_cidrs` | list(string) | `["0.0.0.0/0"]` | accès public à l'ALB |
@@ -160,12 +160,12 @@ facturés à l'ingestion et se remplissent vite. À activer ponctuellement, puis
 
 - Changer `nat_mode` sur une stack en marche recrée les routes : coupure de la
   sortie Internet pendant l'`apply`.
-- `nat_instance_type` doit rester une famille **ARM** (`t4g`, `c7g`) :
-  l'AMI sélectionnée est `al2023-ami-2023.*-arm64`. Un `t3.nano` échouerait au
-  démarrage.
+- `nat_instance_type` doit rester une famille **x86_64** (`t3`, `t2`, `m5`...) :
+  l'AMI sélectionnée est `al2023-ami-2023.*-x86_64`. Un `t4g.*` (ARM)
+  échouerait au démarrage — architecture incompatible avec l'AMI.
 - Sur un compte AWS "Free Plan", seuls les types explicitement éligibles free
-  tier sont acceptés au lancement — `t4g.nano` est refusé par l'API
-  (`InvalidParameterCombination: not eligible for Free Tier`), `t4g.micro`
+  tier sont acceptés au lancement — `t3.nano` est refusé par l'API
+  (`InvalidParameterCombination: not eligible for Free Tier`), `t3.micro`
   passe. Vérifier `aws ec2 describe-instance-types --filters
   Name=free-tier-eligible,Values=true` en cas de doute.
 - Les subnets `private-data` n'ont pas de route sortante : une instance RDS ne

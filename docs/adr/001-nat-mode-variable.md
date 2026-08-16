@@ -45,7 +45,7 @@ de tfvars, pas un changement de code.
 | Mode | Mécanisme | Coût mensuel estimé | Disponibilité | Accès Internet sortant |
 |---|---|---|---|---|
 | `gateway` | NAT Gateway managée dans le subnet public | ~32 USD (1 AZ) / ~64 USD (2 AZ) | Gérée par AWS, redondante dans son AZ | Complet |
-| `instance` | EC2 `t4g.micro` faisant du routage NAT | ~3 USD | SPOF, restauration manuelle | Complet |
+| `instance` | EC2 `t3.micro` faisant du routage NAT | ~3 USD | SPOF, restauration manuelle | Complet |
 | `endpoints` | VPC endpoints uniquement (S3 gateway + interfaces SSM, Logs, Monitoring, Secrets Manager) | ~7,50 USD/mois par endpoint **et par AZ** — soit ~90 USD/mois pour 6 endpoints sur 2 AZ. L'endpoint S3 de type gateway est gratuit. | Redondants par AZ | **Aucun** — seuls les services AWS ciblés sont joignables |
 
 ### Valeur par défaut

@@ -258,7 +258,7 @@ mois entier** :
 
 | Poste | Profil économique (défaut) | Profil démonstration (jury) |
 |---|---|---|
-| Sortie Internet privée | instance NAT `t4g.nano` : ~3 USD | NAT Gateway HA (2 AZ) : ~64 USD |
+| Sortie Internet privée | instance NAT `t3.micro` : ~3 USD | NAT Gateway HA (2 AZ) : ~64 USD |
 | ALB | socle fixe, indépendant du trafic | ~18 USD | ~18 USD |
 | EC2 ASG | 1 × `t3.micro` : ~7,50 USD (0 si free tier) | 2 × `t3.micro` : ~15 USD (0 si free tier) |
 | RDS PostgreSQL | `db.t4g.micro` mono-AZ, 20 Go : ~13 USD (0 si free tier) | Multi-AZ : ~26 USD |

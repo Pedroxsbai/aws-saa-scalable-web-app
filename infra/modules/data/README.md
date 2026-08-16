@@ -77,3 +77,27 @@ pas être libérées pour ce projet.
 compte vers un plan payant standard, ou libération d'un slot), un simple
 `terraform plan` proposera de créer l'unique ressource manquante — aucun
 changement de code nécessaire.
+
+**Vérifié le 2026-08-16** : le blocage n'est pas propre à Terraform. Un appel
+direct `aws rds create-db-instance` avec les mêmes paramètres échoue à
+l'identique :
+
+```
+$ aws rds create-db-instance --db-instance-identifier test-quota-check \
+    --db-instance-class db.t3.micro --engine postgres --engine-version 16.9 \
+    --master-username testadmin --manage-master-user-password \
+    --allocated-storage 20 --no-publicly-accessible --region eu-west-3
+
+An error occurred (InstanceQuotaExceeded) when calling the CreateDBInstance
+operation: You reached the maximum number of instances available with free
+plan accounts. To remove all limitations, upgrade your account plan.
+```
+
+C'est bien AWS qui rejette la requête à la validation de l'API
+`CreateDBInstance`, avant toute création de ressource facturable — la
+console web utilise le même endpoint et se heurtera au même refus. Le crédit
+disponible sur le compte n'entre pas en jeu : ce n'est pas une limite de
+dépense, c'est un plafond de nombre d'instances imposé par le palier "Free
+Plan", indépendant du crédit et des quotas de service classiques (vérifié :
+le vrai quota de service RDS est à 40). Aucune option Terraform, CLI ou
+paramètre de la requête ne permet de le contourner.

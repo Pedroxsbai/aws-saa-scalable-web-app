@@ -179,9 +179,9 @@ variable "enable_ssm_endpoints" {
 }
 
 variable "nat_instance_type" {
-  description = "Type d'instance utilisé quand nat_mode = \"instance\". t4g.micro (ARM), le plus petit type ARM éligible free tier disponible sur ce compte — t4g.nano est refusé par l'API sur les comptes \"Free Plan\" (InvalidParameterCombination: not eligible for Free Tier)."
+  description = "Type d'instance utilisé quand nat_mode = \"instance\". t3.micro (x86_64), éligible free tier sur les comptes \"Free Plan\" (t3.nano est refusé par l'API : InvalidParameterCombination: not eligible for Free Tier)."
   type        = string
-  default     = "t4g.micro"
+  default     = "t3.micro"
 }
 
 
