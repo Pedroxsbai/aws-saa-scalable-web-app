@@ -1,9 +1,8 @@
 # Modules Terraform
 
-Cinq modules locaux prévus, écrits au fil des sessions. Aucun module externe
-(registry public) : l'objectif pédagogique est d'écrire les ressources à la
-main pour la préparation de la certification. `networking`, `data` et
-`compute` sont écrits (session 3) ; `edge` et `observability` restent à venir.
+Cinq modules locaux, tous écrits. Aucun module externe (registry public) :
+l'objectif pédagogique est d'écrire les ressources à la main pour la
+préparation de la certification.
 
 ## Conventions communes
 
@@ -43,32 +42,15 @@ Voir [`data/README.md`](data/README.md).
 Voir [`compute/README.md`](compute/README.md). Utilise un stub HTTP en
 placeholder tant que `app/` n'existe pas.
 
-## Modules prévus
+### `edge`
 
-### `edge` — session 4
+Voir [`edge/README.md`](edge/README.md). Le bucket S3 existe toujours ; la
+distribution CloudFront est optionnelle (`enable_cloudfront`).
 
-La diffusion des contenus statiques.
+### `observability`
 
-- Bucket S3 des assets : accès public bloqué, versioning, chiffrement
-- Distribution CloudFront avec Origin Access Control (OAC, pas l'ancien OAI)
-- Politique de bucket n'autorisant que la distribution
-- Certificat par défaut `*.cloudfront.net` : le projet n'a pas de nom de
-  domaine, donc pas d'ACM ni de Route 53
-
-Sorties : `assets_bucket_name`, `cloudfront_domain_name`.
-
-### `observability` — session 4
-
-La surveillance et les garde-fous de coût.
-
-- Topic SNS + abonnement e-mail
-- Alarmes CloudWatch : CPU de l'ASG, hôtes sains de l'ALB, 5xx, CPU et
-  stockage libre RDS
-- Log groups avec rétention courte
-- Tableau de bord CloudWatch
-- AWS Budgets mensuel avec notifications par palier
-
-Sorties : `sns_topic_arn`, `dashboard_url`.
+Voir [`observability/README.md`](observability/README.md). Référence les
+sorties de tous les autres modules — écrit et appliqué en dernier.
 
 ## Graphe de dépendances
 

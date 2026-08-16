@@ -73,3 +73,28 @@ module "compute" {
   enable_detailed_monitoring = var.enable_detailed_monitoring
   log_retention_days         = var.log_retention_days
 }
+
+module "edge" {
+  source = "./modules/edge"
+
+  name_prefix            = local.name_prefix
+  enable_cloudfront      = var.enable_cloudfront
+  cloudfront_price_class = var.cloudfront_price_class
+  s3_force_destroy       = var.s3_force_destroy
+}
+
+module "observability" {
+  source = "./modules/observability"
+
+  name_prefix  = local.name_prefix
+  project_name = var.project_name
+  alarm_email  = var.alarm_email
+
+  asg_name                = module.compute.asg_name
+  alb_arn_suffix          = module.compute.alb_arn_suffix
+  target_group_arn_suffix = module.compute.target_group_arn_suffix
+  db_instance_id          = module.data.db_instance_id
+
+  budget_limit_usd        = var.budget_limit_usd
+  budget_alert_thresholds = var.budget_alert_thresholds
+}

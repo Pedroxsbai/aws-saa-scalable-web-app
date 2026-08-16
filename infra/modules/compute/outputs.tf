@@ -13,6 +13,16 @@ output "alb_arn" {
   value       = aws_lb.this.arn
 }
 
+output "alb_arn_suffix" {
+  description = "Suffixe d'ARN de l'ALB (ex. app/name/id), requis comme dimension CloudWatch LoadBalancer par le module observability."
+  value       = aws_lb.this.arn_suffix
+}
+
+output "target_group_arn_suffix" {
+  description = "Suffixe d'ARN du target group, requis comme dimension CloudWatch TargetGroup par le module observability."
+  value       = aws_lb_target_group.app.arn_suffix
+}
+
 output "asg_name" {
   description = "Nom de l'Auto Scaling Group."
   value       = aws_autoscaling_group.app.name

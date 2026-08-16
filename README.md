@@ -5,11 +5,12 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 3 sur ~5 — stack complète déployée et testée sur AWS en
-`eu-west-1`.** VPC, routage, instance NAT, ALB, target group, ASG **et RDS**
-tournent réellement sur le compte (`terraform apply` réussi, RDS
-`available`), et l'endpoint `/health` répond `200` de bout en bout. Les
-modules `edge` et `observability` restent à écrire.
+**Statut : session 4 sur ~5 — les 5 modules sont écrits et déployés sur AWS
+en `eu-west-1`.** VPC, routage, instance NAT, ALB, ASG, RDS, bucket S3
+d'assets, SNS, 5 alarmes CloudWatch, tableau de bord et budget mensuel
+tournent réellement sur le compte (`terraform apply` réussi, 0 erreur),
+l'endpoint `/health` répond `200` de bout en bout. Restent : CI/CD OIDC
+(session 5) et l'application ASP.NET Core (remplace le stub de test actuel).
 
 **Pourquoi `eu-west-1` et pas `eu-west-3` :** le compte AWS utilisé est en
 "Free Plan", qui plafonne le nombre d'instances RDS **par région**,
@@ -64,7 +65,9 @@ aws-saa-scalable-web-app/
 │       ├── README.md                # périmètre des 5 modules
 │       ├── networking/              # VPC, subnets, routage, NAT, endpoints
 │       ├── data/                    # instance RDS PostgreSQL
-│       └── compute/                 # ALB, ASG, WAF optionnel
+│       ├── compute/                 # ALB, ASG, WAF optionnel
+│       ├── edge/                    # S3 assets, CloudFront optionnel
+│       └── observability/           # SNS, alarmes, dashboard, budget
 ├── Makefile                         # cycle de vie (référence, utilisé en CI)
 ├── make.ps1                         # équivalent PowerShell pour poste Windows
 ├── .gitignore
@@ -265,13 +268,14 @@ mois entier** :
 | Poste | Profil économique (défaut) | Profil démonstration (jury) |
 |---|---|---|
 | Sortie Internet privée | instance NAT `t3.micro` : ~3 USD | NAT Gateway HA (2 AZ) : ~64 USD |
-| ALB | socle fixe, indépendant du trafic | ~18 USD | ~18 USD |
+| ALB | socle fixe (indépendant du trafic) : ~18 USD | ~18 USD |
 | EC2 ASG | 1 × `t3.micro` : ~7,50 USD (0 si free tier) | 2 × `t3.micro` : ~15 USD (0 si free tier) |
 | RDS PostgreSQL | `db.t4g.micro` mono-AZ, 20 Go : ~13 USD (0 si free tier) | Multi-AZ : ~26 USD |
 | WAF | désactivé : 0 USD | 1 Web ACL + règles managées : ~6 USD |
 | CloudFront | désactivé : 0 USD | trafic de démonstration : < 1 USD |
 | VPC endpoints d'interface | aucun (SSM passe par le NAT) : 0 USD | idem : 0 USD (endpoint S3 seul reste gratuit) |
-| S3, CloudWatch, SNS | volumes marginaux : ~2 USD | ~2 USD |
+| S3 (assets) | bucket seul, volumes marginaux : < 0,10 USD | idem |
+| SNS, alarmes CloudWatch, dashboard, budget | dans le free tier standard : 0 USD | idem |
 | Backend de state | S3 + DynamoDB : < 0,10 USD | idem |
 | **Total** | **~26 USD/mois** | **~135 USD/mois** |
 
@@ -385,9 +389,9 @@ rien démontrer de neuf.
 | Session | Périmètre | État |
 |---|---|---|
 | 1 | Scaffolding : arborescence, backend, variables, Makefile, ADR-001 | ✅ terminée |
-| 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ écrite, non appliquée |
-| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique ; migration eu-west-3 → eu-west-1 | ✅ stack complète déployée et testée sur AWS (`curl` → 200), RDS inclus |
-| 4 | Modules `edge` et `observability` : S3, CloudFront, alarmes, budget | à venir |
+| 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ déployée |
+| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique ; migration eu-west-3 → eu-west-1 | ✅ déployée et testée sur AWS (`curl` → 200), RDS inclus |
+| 4 | Modules `edge` et `observability` : S3, CloudFront optionnel, SNS, alarmes, dashboard, budget filtré par tag | ✅ déployée (`terraform apply` : 15 ressources, 0 erreur) |
 | 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |
 
 ## Décisions d'architecture
