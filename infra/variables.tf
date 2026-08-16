@@ -179,9 +179,9 @@ variable "enable_ssm_endpoints" {
 }
 
 variable "nat_instance_type" {
-  description = "Type d'instance utilisé quand nat_mode = \"instance\". t4g.nano (ARM) est le moins cher couvrant le besoin."
+  description = "Type d'instance utilisé quand nat_mode = \"instance\". t4g.micro (ARM), le plus petit type ARM éligible free tier disponible sur ce compte — t4g.nano est refusé par l'API sur les comptes \"Free Plan\" (InvalidParameterCombination: not eligible for Free Tier)."
   type        = string
-  default     = "t4g.nano"
+  default     = "t4g.micro"
 }
 
 
@@ -279,9 +279,9 @@ variable "db_instance_class" {
 }
 
 variable "db_engine_version" {
-  description = "Version majeure/mineure de PostgreSQL. Épinglée pour éviter une mise à jour surprise au prochain apply."
+  description = "Version majeure/mineure de PostgreSQL. Épinglée pour éviter une mise à jour surprise au prochain apply. Vérifier les versions disponibles : aws rds describe-db-engine-versions --engine postgres --region <region>."
   type        = string
-  default     = "16.4"
+  default     = "16.9"
 }
 
 variable "multi_az" {

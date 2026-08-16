@@ -37,7 +37,7 @@
 # démonstration finale.
 # nat_mode              = "instance"   # "gateway" | "instance" | "endpoints"
 # nat_high_availability = false        # true = un NAT par AZ, double le coût
-# nat_instance_type     = "t4g.nano"   # utilisé si nat_mode = "instance"
+# nat_instance_type     = "t4g.micro"  # utilisé si nat_mode = "instance" ; doit rester eligible free tier
 # enable_ssm_endpoints  = false        # true = ~7,50 USD/mois/AZ/endpoint, cf. README networking
 
 

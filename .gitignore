@@ -24,6 +24,7 @@ backend.hcl
 *.tfplan
 *.tfplan.*
 plan.out
+tfplan
 
 # Overrides locaux
 override.tf

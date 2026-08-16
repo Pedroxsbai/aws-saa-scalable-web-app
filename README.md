@@ -5,10 +5,16 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 3 sur ~5 — networking, data, compute écrits.** VPC, RDS,
-ALB et ASG sont codés et validés (`terraform validate`), mais **aucun
-`terraform apply` n'a encore été exécuté** : rien n'existe côté AWS. Les
-modules `edge` et `observability` restent à écrire.
+**Statut : session 3 sur ~5 — networking et compute déployés sur AWS, RDS en
+attente.** Un premier `terraform apply` a été exécuté avec succès : VPC,
+routage, instance NAT, ALB, target group et ASG (1 instance) tournent
+réellement sur le compte, et l'endpoint `/health` répond `200` en conditions
+réelles. **RDS reste bloqué** : le compte AWS utilisé est en "Free Plan", qui
+plafonne à 2 instances RDS au niveau technique, indépendamment du crédit
+disponible — 2 instances appartenant à d'autres projets occupent déjà ce
+quota. Détail et options dans le
+[README du module data](infra/modules/data/README.md#blocage-connu--free-plan-aws).
+Les modules `edge` et `observability` restent à écrire.
 
 **Profil par défaut : économie maximale.** `nat_mode = "instance"`,
 `enable_waf = false`, `enable_cloudfront = false`, `asg_min_size = 1`,
@@ -374,7 +380,7 @@ rien démontrer de neuf.
 |---|---|---|
 | 1 | Scaffolding : arborescence, backend, variables, Makefile, ADR-001 | ✅ terminée |
 | 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ écrite, non appliquée |
-| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique | ✅ écrite, non appliquée |
+| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique | ✅ networking + compute déployés et testés (`curl` → 200) ; RDS bloqué par le Free Plan AWS |
 | 4 | Modules `edge` et `observability` : S3, CloudFront, alarmes, budget | à venir |
 | 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |
 

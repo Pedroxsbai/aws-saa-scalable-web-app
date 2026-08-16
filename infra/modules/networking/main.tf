@@ -178,7 +178,7 @@ resource "aws_security_group" "nat_instance" {
   count = var.nat_mode == "instance" ? 1 : 0
 
   name        = "${var.name_prefix}-nat-instance-sg"
-  description = "Trafic transitant par l'instance NAT"
+  description = "Trafic transitant par l instance NAT"
   vpc_id      = aws_vpc.this.id
 
   tags = {
@@ -394,7 +394,7 @@ resource "aws_security_group" "vpc_endpoints" {
   count = length(local.interface_endpoints) > 0 ? 1 : 0
 
   name        = "${var.name_prefix}-vpce-sg"
-  description = "HTTPS entrant vers les endpoints d'interface"
+  description = "HTTPS entrant vers les endpoints d interface"
   vpc_id      = aws_vpc.this.id
 
   tags = {
@@ -410,7 +410,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpce_https_from_vpc" {
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
-  description       = "HTTPS depuis l'ensemble du VPC"
+  description       = "HTTPS depuis l ensemble du VPC"
 }
 
 resource "aws_vpc_endpoint" "interface" {
@@ -444,7 +444,7 @@ resource "aws_vpc_endpoint" "interface" {
 
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb-sg"
-  description = "Trafic public entrant vers l'ALB"
+  description = "Trafic public entrant vers l ALB"
   vpc_id      = aws_vpc.this.id
 
   tags = {
@@ -471,7 +471,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
-  description       = "HTTPS public (sans domaine, non exploite pour l'instant)"
+  description       = "HTTPS public (sans domaine, non exploite pour l instant)"
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
@@ -487,7 +487,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
 
 resource "aws_security_group" "app" {
   name        = "${var.name_prefix}-app-sg"
-  description = "Instances applicatives de l'ASG"
+  description = "Instances applicatives de l ASG"
   vpc_id      = aws_vpc.this.id
 
   tags = {
@@ -503,7 +503,7 @@ resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
   from_port                    = var.app_port
   to_port                      = var.app_port
   ip_protocol                  = "tcp"
-  description                  = "Trafic applicatif depuis l'ALB"
+  description                  = "Trafic applicatif depuis l ALB"
 }
 
 # Aucune règle SSH : l'accès se fait par Session Manager, qui sort en HTTPS

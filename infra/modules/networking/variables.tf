@@ -53,9 +53,9 @@ variable "nat_high_availability" {
 }
 
 variable "nat_instance_type" {
-  description = "Type d'instance quand nat_mode = \"instance\". Doit être une famille ARM (Graviton) pour rester cohérent avec l'AMI sélectionnée."
+  description = "Type d'instance quand nat_mode = \"instance\". Doit être une famille ARM (Graviton) pour rester cohérent avec l'AMI sélectionnée, et éligible free tier sur les comptes \"Free Plan\" (t4g.nano est refusé par l'API sur ce type de compte)."
   type        = string
-  default     = "t4g.nano"
+  default     = "t4g.micro"
 }
 
 variable "enable_ssm_endpoints" {

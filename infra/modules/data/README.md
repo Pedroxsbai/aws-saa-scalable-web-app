@@ -47,3 +47,33 @@ rôle IAM d'instance un accès en lecture seule au secret, et à lui seul.
 `db.t4g.micro` + 20 Go gp3 mono-AZ : éligible free tier la première année du
 compte ; hors free tier, environ 13 USD/mois. `multi_az = true` double ce
 montant.
+
+## Blocage connu — Free Plan AWS
+
+Sur le compte utilisé pour ce projet, `terraform apply` échoue sur
+`aws_db_instance.this` avec :
+
+```
+InstanceQuotaExceeded: You reached the maximum number of instances
+available with free plan accounts. To remove all limitations, upgrade
+your account plan.
+```
+
+Ce n'est **pas** une erreur de code ni un quota AWS classique (le vrai quota
+de service RDS, vérifié via `aws service-quotas get-service-quota --service-code
+rds --quota-code L-7B6409FD`, est à 40). C'est une restriction technique
+propre au **"Free Plan"** — un palier de compte AWS distinct de la facturation
+et du crédit disponible : le compte plafonne à un nombre fixe d'instances RDS
+(2, observé) quelle que soit la classe d'instance choisie. Le même mécanisme
+bloque aussi les types EC2 non explicitement éligibles free tier au lancement
+(`t4g.nano` refusé, `t4g.micro` accepté) — cf. le fix appliqué sur
+`nat_instance_type` dans le module `networking`.
+
+Sur ce compte, les 2 instances RDS existantes (`insighthub-dev-postgres`,
+`jobzyn-dev-postgres`) appartiennent à d'autres projets actifs et ne peuvent
+pas être libérées pour ce projet.
+
+**Ce module reste écrit et prêt** : dès que le blocage est levé (upgrade du
+compte vers un plan payant standard, ou libération d'un slot), un simple
+`terraform plan` proposera de créer l'unique ressource manquante — aucun
+changement de code nécessaire.
