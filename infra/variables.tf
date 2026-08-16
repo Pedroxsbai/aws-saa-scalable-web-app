@@ -44,6 +44,17 @@ variable "owner" {
   default     = "manara-graduation"
 }
 
+variable "github_repository" {
+  description = "Dépôt GitHub autorisé à assumer les rôles OIDC de la CI, au format \"owner/repo\"."
+  type        = string
+  default     = "Pedroxsbai/aws-saa-scalable-web-app"
+
+  validation {
+    condition     = can(regex("^[^/\\s]+/[^/\\s]+$", var.github_repository))
+    error_message = "github_repository doit être au format \"owner/repo\"."
+  }
+}
+
 variable "extra_tags" {
   description = "Tags additionnels fusionnés avec les tags obligatoires du provider. Les tags obligatoires ne peuvent pas être écrasés ici."
   type        = map(string)

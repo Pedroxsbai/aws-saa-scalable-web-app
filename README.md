@@ -5,12 +5,13 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 4 sur ~5 — les 5 modules sont écrits et déployés sur AWS
-en `eu-west-1`.** VPC, routage, instance NAT, ALB, ASG, RDS, bucket S3
-d'assets, SNS, 5 alarmes CloudWatch, tableau de bord et budget mensuel
-tournent réellement sur le compte (`terraform apply` réussi, 0 erreur),
-l'endpoint `/health` répond `200` de bout en bout. Restent : CI/CD OIDC
-(session 5) et l'application ASP.NET Core (remplace le stub de test actuel).
+**Statut : session 5 sur ~5 — infrastructure et CI/CD déployés.** Les 5
+modules applicatifs tournent sur AWS en `eu-west-1` (VPC, ALB, ASG, RDS,
+S3, SNS, alarmes, budget), et la CI/CD GitHub Actions par OIDC est en place
+et testée de bout en bout : deux rôles IAM séparés par privilège (lecture
+seule sur PR, lecture/écriture sur push `main`), aucune clé longue durée.
+Détail dans [ADR-003](docs/adr/003-cicd-oidc-deux-roles.md). Reste
+l'application ASP.NET Core, qui remplace le stub de test actuel.
 
 **Pourquoi `eu-west-1` et pas `eu-west-3` :** le compte AWS utilisé est en
 "Free Plan", qui plafonne le nombre d'instances RDS **par région**,
@@ -44,20 +45,24 @@ ces défauts impliquent et comment basculer vers un profil de démonstration.
 ```
 aws-saa-scalable-web-app/
 ├── .github/
-│   └── workflows/                   # pipelines CI/CD (session 5)
+│   └── workflows/
+│       ├── plan.yml                 # PR -> fmt-check, validate, plan (lecture seule)
+│       └── apply.yml                # push main -> apply automatique
 ├── app/
 │   └── README.md                    # application ASP.NET Core (session 3+)
 ├── docs/
 │   ├── adr/
 │   │   ├── 001-nat-mode-variable.md # décision sur la sortie Internet privée
-│   │   └── 002-region-eu-west-1.md  # migration de région, quota RDS Free Plan
+│   │   ├── 002-region-eu-west-1.md  # migration de région, quota RDS Free Plan
+│   │   └── 003-cicd-oidc-deux-roles.md # CI/CD OIDC, scoping IAM, apply auto
 │   └── diagrams/                    # diagramme d'architecture (à venir)
 ├── infra/
 │   ├── backend.tf                   # state distant S3 + verrou DynamoDB
 │   ├── backend.hcl.example          # modèle de config backend (ID de compte)
 │   ├── versions.tf                  # contraintes Terraform et providers
 │   ├── providers.tf                 # provider aws, default_tags, locals
-│   ├── variables.tf                 # 35 variables d'entrée, toutes validées
+│   ├── cicd.tf                      # OIDC GitHub Actions, 2 rôles IAM
+│   ├── variables.tf                 # 36 variables d'entrée, toutes validées
 │   ├── main.tf                      # composition : appels de modules
 │   ├── outputs.tf                   # sorties de la stack
 │   ├── terraform.tfvars.example     # modèle de configuration locale
@@ -226,6 +231,39 @@ Cibles disponibles :
 `apply` exige un plan préalable : aucune application ne se fait sur un diff
 recalculé à la volée, y compris en CI.
 
+### CI/CD
+
+Deux workflows GitHub Actions, authentifiés par OIDC (aucune clé AWS stockée
+en secret) :
+
+| Workflow | Déclencheur | Rôle IAM assumé | Effet |
+|---|---|---|---|
+| `plan.yml` | pull request touchant `infra/` | `github_actions_plan` (lecture seule) | `fmt-check` + `validate` + `plan`, sans jamais appliquer |
+| `apply.yml` | push sur `main` touchant `infra/` | `github_actions_apply` (lecture/écriture) | `fmt-check` + `validate` + `plan` + `apply -auto-approve` |
+
+Le rôle `plan` ne peut techniquement pas écrire — même un run compromis sur
+une pull request externe ne peut rien modifier. Le rôle `apply` n'est
+assumable que par les runs déclenchés par un push sur `main` (vérifié au
+niveau du token OIDC lui-même, pas d'une logique de workflow contournable).
+Détail du scoping et des compromis assumés : [ADR-003](docs/adr/003-cicd-oidc-deux-roles.md).
+
+**`apply` se déclenche automatiquement au merge, sans validation
+supplémentaire** — la review de la pull request est le point de contrôle.
+Vérifier soigneusement `terraform.tfvars` et le diff de plan affiché dans la
+PR avant de merger : il n'y a personne d'autre entre le merge et la création
+réelle des ressources.
+
+Variables de dépôt requises (`Settings > Secrets and variables > Actions >
+Variables`, déjà configurées pour ce dépôt) :
+
+| Variable | Valeur |
+|---|---|
+| `AWS_PLAN_ROLE_ARN` | ARN du rôle lecture seule (`terraform output github_actions_plan_role_arn`) |
+| `AWS_APPLY_ROLE_ARN` | ARN du rôle lecture/écriture (`terraform output github_actions_apply_role_arn`) |
+| `TFSTATE_BUCKET` | nom du bucket de state |
+| `TFSTATE_REGION` | région du bucket de state (`eu-west-3`, indépendante de `var.region`) |
+| `TFSTATE_LOCK_TABLE` | nom de la table DynamoDB de verrou |
+
 ---
 
 ## Nettoyage
@@ -392,9 +430,10 @@ rien démontrer de neuf.
 | 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ déployée |
 | 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique ; migration eu-west-3 → eu-west-1 | ✅ déployée et testée sur AWS (`curl` → 200), RDS inclus |
 | 4 | Modules `edge` et `observability` : S3, CloudFront optionnel, SNS, alarmes, dashboard, budget filtré par tag | ✅ déployée (`terraform apply` : 15 ressources, 0 erreur) |
-| 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |
+| 5 | CI/CD GitHub Actions avec OIDC (2 rôles, plan sur PR, apply sur push main) | ✅ déployée |
 
 ## Décisions d'architecture
 
 - [ADR-001 — Sortie Internet des subnets privés pilotée par `nat_mode`](docs/adr/001-nat-mode-variable.md)
 - [ADR-002 — Migration de région eu-west-3 → eu-west-1 (quota RDS Free Plan)](docs/adr/002-region-eu-west-1.md)
+- [ADR-003 — CI/CD par OIDC, deux rôles séparés par privilège, apply automatique](docs/adr/003-cicd-oidc-deux-roles.md)

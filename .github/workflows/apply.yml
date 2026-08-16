@@ -1,0 +1,80 @@
+name: Terraform apply
+
+# Sur chaque push sur main touchant infra/, applique automatiquement le
+# diff. Aucune validation manuelle interposée : le garde-fou est la review
+# de la pull request avant le merge, pas une étape supplémentaire ici.
+#
+# Le rôle assumé (github_actions_apply) n'est assumable QUE par les runs
+# déclenchés par un push sur main (condition sur le "sub" du token OIDC,
+# cf. infra/cicd.tf) — aucune pull request ne peut l'invoquer, même depuis
+# ce dépôt.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/apply.yml"
+
+permissions:
+  id-token: write # requis pour l'échange OIDC avec AWS
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+concurrency:
+  # Un seul apply à la fois : le verrou DynamoDB empêcherait de toute façon
+  # deux runs concurrents de progresser, mais les sérialiser explicitement
+  # évite qu'un run reste bloqué en attente de lock sans le signaler
+  # clairement dans les logs.
+  group: terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: fmt-check, validate, plan, apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, rôle lecture/écriture)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.TFSTATE_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Écrire la config du backend
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${{ vars.TFSTATE_BUCKET }}"
+          key            = "infra/dev/terraform.tfstate"
+          region         = "${{ vars.TFSTATE_REGION }}"
+          dynamodb_table = "${{ vars.TFSTATE_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+
+      - name: terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -diff -recursive
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: terraform apply
+        run: terraform apply -input=false -no-color -auto-approve tfplan

@@ -33,13 +33,5 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
-
-    # Rendu de documents IAM en JSON (data.aws_iam_policy_document est fourni
-    # par le provider aws ; tls sert aux certificats auto-signés éventuels en
-    # dev, jamais en production).
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
   }
 }

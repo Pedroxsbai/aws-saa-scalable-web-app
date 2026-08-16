@@ -53,6 +53,16 @@ output "cloudfront_domain_name" {
   value       = module.edge.cloudfront_domain_name
 }
 
+output "github_actions_plan_role_arn" {
+  description = "ARN du rôle IAM lecture seule assumé par la CI sur les pull requests."
+  value       = aws_iam_role.github_actions_plan.arn
+}
+
+output "github_actions_apply_role_arn" {
+  description = "ARN du rôle IAM lecture/écriture assumé par la CI sur les push vers main."
+  value       = aws_iam_role.github_actions_apply.arn
+}
+
 output "sns_topic_arn" {
   description = "ARN du topic SNS d'alertes (alarmes CloudWatch et budget)."
   value       = module.observability.sns_topic_arn

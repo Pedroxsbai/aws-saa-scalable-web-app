@@ -1,0 +1,64 @@
+name: Terraform plan
+
+# Sur chaque pull request touchant infra/, calcule et affiche le diff.
+# N'applique jamais rien : le rôle assumé ici (github_actions_plan) n'a que
+# des permissions de lecture, y compris sur le state.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/plan.yml"
+
+permissions:
+  id-token: write # requis pour l'échange OIDC avec AWS
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    name: fmt-check, validate, plan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, rôle lecture seule)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.TFSTATE_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Écrire la config du backend
+        run: |
+          cat > backend.hcl <<EOF
+          bucket         = "${{ vars.TFSTATE_BUCKET }}"
+          key            = "infra/dev/terraform.tfstate"
+          region         = "${{ vars.TFSTATE_REGION }}"
+          dynamodb_table = "${{ vars.TFSTATE_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+
+      - name: terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -diff -recursive
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        run: terraform plan -input=false -no-color
