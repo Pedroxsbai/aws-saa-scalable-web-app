@@ -32,8 +32,19 @@ locals {
   tfstate_bucket_name = "tfstate-aws-saa-manara-${local.account_id}"
   tfstate_lock_table  = "tf-lock-aws-saa-manara"
 
-  github_sub_pull_request = "repo:${var.github_repository}:pull_request"
-  github_sub_main_push    = "repo:${var.github_repository}:ref:refs/heads/main"
+  # ATTENTION : le "sub" réellement émis par GitHub n'est PAS
+  # "repo:owner/repo:...". Il inclut les identifiants numériques immuables du
+  # propriétaire et du dépôt, accolés au nom par un "@" :
+  #   repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main
+  # Vérifié via CloudTrail sur un run réel (AssumeRoleWithWebIdentity,
+  # champ userIdentity.principalId) après un premier échec de matching avec
+  # le format "documenté" naïf. Le nom seul ne suffit donc pas : on matche
+  # par wildcard sur la partie variable (l'ID), pas sur le nom en entier.
+  github_owner = split("/", var.github_repository)[0]
+  github_repo  = split("/", var.github_repository)[1]
+
+  github_sub_pull_request = "repo:${local.github_owner}@*/${local.github_repo}@*:pull_request"
+  github_sub_main_push    = "repo:${local.github_owner}@*/${local.github_repo}@*:ref:refs/heads/main"
 }
 
 # ===========================================================================
@@ -130,8 +141,6 @@ data "aws_iam_policy_document" "provisioning_read" {
       "iam:ListAttachedRolePolicies",
       "iam:GetInstanceProfile",
       "iam:GetOpenIDConnectProvider",
-      "iam:ListRoles",
-      "iam:ListOpenIDConnectProviders",
     ]
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.name_prefix}-*",
@@ -140,11 +149,40 @@ data "aws_iam_policy_document" "provisioning_read" {
     ]
   }
 
+  # Les actions List* d'IAM (ListRoles, ListOpenIDConnectProviders...) ne
+  # supportent PAS le scoping par ressource : elles énumèrent tout le
+  # compte par construction, IAM exige donc Resource = "*". Découvert à
+  # l'exécution réelle en CI (AccessDenied sur data.aws_iam_openid_connect_provider,
+  # qui appelle ListOpenIDConnectProviders avant de filtrer par URL côté
+  # client) — pas visible en local avec un rôle qui a déjà tous les droits.
   statement {
-    sid       = "ReadOnlyS3Assets"
-    effect    = "Allow"
-    actions   = ["s3:ListBucket", "s3:GetBucket*", "s3:GetObject", "s3:GetEncryptionConfiguration"]
-    resources = ["arn:aws:s3:::${local.name_prefix}-*"]
+    sid    = "ReadOnlyIamListAccountWide"
+    effect = "Allow"
+    actions = [
+      "iam:ListRoles",
+      "iam:ListOpenIDConnectProviders",
+    ]
+    resources = ["*"]
+  }
+
+  # s3:Get* plutôt qu'une liste de noms d'actions individuels : la
+  # ressource aws_s3_bucket lit en une passe versioning, chiffrement, ACL,
+  # accélération, réplication, etc. — et la nomenclature IAM de ces actions
+  # est incohérente (ex. "s3:GetAccelerateConfiguration", SANS "Bucket"
+  # dans le nom, contrairement à "s3:GetBucketVersioning"). Une liste
+  # explicite se fait contourner par la moindre action non anticipée ;
+  # le wildcard reste scopé à nos seuls buckets.
+  statement {
+    sid    = "ReadOnlyS3Assets"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:Get*",
+    ]
+    resources = [
+      "arn:aws:s3:::${local.name_prefix}-*",
+      "arn:aws:s3:::${local.name_prefix}-*/*",
+    ]
   }
 }
 
@@ -188,6 +226,12 @@ data "aws_iam_policy_document" "provisioning_write" {
       "iam:CreateRole",
       "iam:DeleteRole",
       "iam:UpdateRole",
+      # Action distincte de UpdateRole : c'est celle-ci qui modifie
+      # spécifiquement le document de confiance (assume_role_policy), pas
+      # les métadonnées du rôle. Manquante initialement — le rôle ne
+      # pouvait donc pas se remettre lui-même à jour (ni mettre à jour son
+      # rôle jumeau), révélé par un run réel appliquant sa propre CI.
+      "iam:UpdateAssumeRolePolicy",
       "iam:TagRole",
       "iam:UntagRole",
       "iam:PutRolePolicy",
@@ -210,19 +254,17 @@ data "aws_iam_policy_document" "provisioning_write" {
   statement {
     sid    = "ManageS3Assets"
     effect = "Allow"
+    # Get* est déjà couvert par provisioning_read (attachée aux deux rôles) ;
+    # ne pas le dupliquer ici. s3:Put* plutôt qu'une liste de noms
+    # individuels, même raison que ReadOnlyS3Assets : la nomenclature IAM
+    # de ces actions est incohérente d'une configuration de bucket à l'autre.
     actions = [
       "s3:CreateBucket",
       "s3:DeleteBucket",
-      "s3:PutBucket*",
-      "s3:GetBucket*",
       "s3:ListBucket",
       "s3:PutObject",
-      "s3:GetObject",
       "s3:DeleteObject",
-      "s3:PutEncryptionConfiguration",
-      "s3:GetEncryptionConfiguration",
-      "s3:PutLifecycleConfiguration",
-      "s3:GetLifecycleConfiguration",
+      "s3:Put*",
     ]
     resources = [
       "arn:aws:s3:::${local.name_prefix}-*",
