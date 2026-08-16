@@ -5,9 +5,10 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 1 sur ~5 — scaffolding.** L'infrastructure n'est pas encore
-implémentée : `infra/` ne contient à ce stade que le contrat d'interface
-(variables, providers, backend). Aucun `terraform apply` n'a été exécuté.
+**Statut : session 2 sur ~5 — module `networking` écrit.** Le socle réseau est
+codé et validé (`terraform validate`), mais **aucun `terraform apply` n'a
+encore été exécuté** : rien n'existe côté AWS. Les modules `compute`, `data`,
+`edge` et `observability` restent à écrire.
 
 ---
 
@@ -40,10 +41,13 @@ aws-saa-scalable-web-app/
 │   ├── backend.hcl.example          # modèle de config backend (ID de compte)
 │   ├── versions.tf                  # contraintes Terraform et providers
 │   ├── providers.tf                 # provider aws, default_tags, locals
-│   ├── variables.tf                 # 33 variables d'entrée, toutes validées
+│   ├── variables.tf                 # 35 variables d'entrée, toutes validées
+│   ├── main.tf                      # composition : appels de modules
+│   ├── outputs.tf                   # sorties de la stack
 │   ├── terraform.tfvars.example     # modèle de configuration locale
 │   └── modules/
-│       └── README.md                # les 5 modules à venir et leur périmètre
+│       ├── README.md                # périmètre des 5 modules
+│       └── networking/              # VPC, subnets, routage, NAT, endpoints
 ├── Makefile                         # cycle de vie (référence, utilisé en CI)
 ├── make.ps1                         # équivalent PowerShell pour poste Windows
 ├── .gitignore
@@ -237,7 +241,8 @@ sortant, **si la stack tourne un mois entier** :
 | RDS PostgreSQL | `db.t4g.micro`, mono-AZ, 20 Go | ~13 USD (0 si free tier) |
 | WAF | 1 Web ACL + règles managées | ~6 USD |
 | CloudFront | trafic de démonstration | < 1 USD |
-| S3, CloudWatch, SNS | volumes marginaux | ~2 USD |
+| VPC endpoints d'interface | aucun par défaut (SSM passe par le NAT) | 0 USD |
+| S3, CloudWatch, SNS | volumes marginaux, endpoint S3 gratuit | ~2 USD |
 | Backend de state | S3 + DynamoDB | < 0,10 USD |
 | **Total** | | **~85 USD/mois** |
 
@@ -254,6 +259,14 @@ de deux mois.** D'où les règles de travail suivantes.
    gagnées à chaque cycle apply/destroy.
 4. `multi_az = false` (défaut) : Multi-AZ double le coût RDS.
 5. `enable_waf = false` tant que la sécurité applicative n'est pas le sujet.
+
+**Piège à connaître :** un VPC endpoint d'interface est facturé par ENI, donc
+**par AZ** — ~7,50 USD/mois chacun, ~15 USD sur 2 AZ. Les trois endpoints SSM
+coûteraient donc plus cher qu'une NAT Gateway. Ils ne sont créés que si
+`enable_ssm_endpoints = true`, ou automatiquement en mode
+`nat_mode = "endpoints"` où ils sont indispensables. Corollaire :
+**`nat_mode = "endpoints"` n'est pas le mode le moins cher sur 2 AZ**, il est
+le plus sûr. Détail dans le [README du module networking](infra/modules/networking/README.md).
 
 Le budget AWS Budgets configuré par la stack alerte à 50 %, 80 % et 100 % de
 `budget_limit_usd` (40 USD par défaut). **Il alerte seulement : AWS Budgets
@@ -315,7 +328,7 @@ rien démontrer de neuf.
 | Session | Périmètre | État |
 |---|---|---|
 | 1 | Scaffolding : arborescence, backend, variables, Makefile, ADR-001 | ✅ terminée |
-| 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints SSM | à venir |
+| 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ écrite, non appliquée |
 | 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS | à venir |
 | 4 | Modules `edge` et `observability` : S3, CloudFront, alarmes, budget | à venir |
 | 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |

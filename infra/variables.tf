@@ -172,6 +172,12 @@ variable "nat_high_availability" {
   default     = false
 }
 
+variable "enable_ssm_endpoints" {
+  description = "Crée les endpoints d'interface SSM même quand un NAT existe déjà. Sans effet si nat_mode = \"endpoints\" (ils sont alors indispensables). Coût : ~7,50 USD/mois par endpoint et par AZ, soit ~45 USD/mois sur 2 AZ — d'où le défaut à false."
+  type        = bool
+  default     = false
+}
+
 variable "nat_instance_type" {
   description = "Type d'instance utilisé quand nat_mode = \"instance\". t4g.nano (ARM) est le moins cher couvrant le besoin."
   type        = string
@@ -404,6 +410,12 @@ variable "budget_alert_thresholds" {
   description = "Pourcentages du budget déclenchant une notification."
   type        = list(number)
   default     = [50, 80, 100]
+}
+
+variable "enable_flow_logs" {
+  description = "Active les VPC Flow Logs vers CloudWatch. Précieux pour déboguer un routage privé qui ne passe pas, mais facturé à l'ingestion : à activer ponctuellement, pas en permanence."
+  type        = bool
+  default     = false
 }
 
 variable "enable_detailed_monitoring" {

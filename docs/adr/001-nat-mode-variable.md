@@ -46,7 +46,7 @@ de tfvars, pas un changement de code.
 |---|---|---|---|---|
 | `gateway` | NAT Gateway managée dans le subnet public | ~32 USD (1 AZ) / ~64 USD (2 AZ) | Gérée par AWS, redondante dans son AZ | Complet |
 | `instance` | EC2 `t4g.nano` faisant du routage NAT | ~3 USD | SPOF, restauration manuelle | Complet |
-| `endpoints` | VPC endpoints uniquement (S3 gateway + interfaces SSM, Logs, Secrets Manager) | ~7 USD/mois par endpoint d'interface, 0 pour l'endpoint S3 de type gateway | Redondants par AZ | **Aucun** — seuls les services AWS ciblés sont joignables |
+| `endpoints` | VPC endpoints uniquement (S3 gateway + interfaces SSM, Logs, Monitoring, Secrets Manager) | ~7,50 USD/mois par endpoint **et par AZ** — soit ~90 USD/mois pour 6 endpoints sur 2 AZ. L'endpoint S3 de type gateway est gratuit. | Redondants par AZ | **Aucun** — seuls les services AWS ciblés sont joignables |
 
 ### Valeur par défaut
 
@@ -75,9 +75,12 @@ instance à maintenir (AMI, patches, restauration).
 le plan de la sécurité : aucune route vers Internet depuis les subnets privés,
 surface d'attaque réduite au strict nécessaire. Mais le user-data ne peut plus
 installer le runtime .NET depuis Internet — il faudrait une AMI pré-construite
-(Packer, ou EC2 Image Builder), ce qui déborde du périmètre. Et à trois ou
-quatre endpoints d'interface facturés ~7 USD/mois chacun, l'économie face à une
-NAT Gateway unique devient marginale.
+(Packer, ou EC2 Image Builder), ce qui déborde du périmètre. Surtout, le
+calcul de coût joue contre ce mode : un endpoint d'interface est facturé par
+ENI, donc **par AZ**. Six endpoints sur 2 AZ coûtent ~90 USD/mois, soit près du
+triple d'une NAT Gateway unique. Le mode `endpoints` est le plus sûr, pas le
+moins cher — c'est l'inverse de l'intuition de départ, et c'est ce qui a motivé
+de garder `gateway` par défaut.
 
 **Faire du sujet une décision de dernière minute.** Repousser le choix aurait
 signifié écrire le module `networking` autour d'une hypothèse implicite, puis
