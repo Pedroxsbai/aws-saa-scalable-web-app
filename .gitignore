@@ -1,0 +1,141 @@
+# ---------------------------------------------------------------------------
+# Terraform
+# ---------------------------------------------------------------------------
+# Répertoire de travail local (providers, modules téléchargés)
+**/.terraform/*
+.terraform.lock.hcl.bak
+
+# State : le state réel vit dans S3, aucun state ne doit atterrir dans git
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Fichiers de variables : peuvent contenir des identifiants ou des valeurs
+# spécifiques au compte. Seuls les .example sont versionnés.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+
+# Plans binaires (contiennent des valeurs sensibles en clair)
+*.tfplan
+*.tfplan.*
+plan.out
+
+# Overrides locaux
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config susceptible de contenir des credentials
+.terraformrc
+terraform.rc
+
+# NOTE : .terraform.lock.hcl DOIT être versionné (verrouillage des versions
+# de providers, reproductibilité des builds CI). Il n'est donc pas ignoré ici.
+
+# ---------------------------------------------------------------------------
+# .NET / ASP.NET Core
+# ---------------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+[Dd]ebug/
+[Rr]elease/
+[Dd]ebugPublic/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+bld/
+publish/
+[Pp]ublish[Pp]rofiles/
+*.publishproj
+*.pubxml
+*.pubxml.user
+*.azurePubxml
+
+# Résultats de compilation et caches
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.dll
+*.exe
+*.pdb
+*.cache
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Tests
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+TestResults/
+
+# Secrets applicatifs — la config sensible passe par SSM Parameter Store /
+# Secrets Manager, jamais par un fichier commité.
+appsettings.*.local.json
+secrets.json
+*.pfx
+*.p12
+*.key
+*.pem
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# ---------------------------------------------------------------------------
+# IDE / éditeurs
+# ---------------------------------------------------------------------------
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+[Tt]humbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.DS_Store?
+._*
+
+# ---------------------------------------------------------------------------
+# Divers projet
+# ---------------------------------------------------------------------------
+# Clés SSH éventuelles (rappel : on utilise Session Manager, pas de bastion,
+# donc aucune key pair ne devrait exister)
+*.ppk
+id_rsa*
+
+# Sorties d'outillage local
+.env
+.env.local
+*.local

@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------------------
+# Configuration du backend S3, passée à l'initialisation :
+#
+#   cp backend.hcl.example backend.hcl
+#   # remplacer <ACCOUNT_ID> par l'ID du compte AWS cible :
+#   #   aws sts get-caller-identity --query Account --output text
+#
+# backend.hcl est ignoré par git : c'est lui qui porte l'ID de compte.
+# Le Makefile passe automatiquement -backend-config=backend.hcl à `init`.
+# ---------------------------------------------------------------------------
+
+bucket = "tfstate-aws-saa-manara-<ACCOUNT_ID>"
+
+# Clé préfixée par l'environnement : prépare une éventuelle séparation
+# dev / prod dans le même bucket sans migration de state.
+key = "infra/dev/terraform.tfstate"
+
+region = "eu-west-3"
+
+# Verrou distant : empêche deux `apply` concurrents (poste local + runner
+# GitHub Actions) de corrompre le state.
+dynamodb_table = "tf-lock-aws-saa-manara"
+
+# Chiffrement au repos.
+encrypt = true
