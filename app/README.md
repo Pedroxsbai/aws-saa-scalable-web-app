@@ -1,11 +1,9 @@
 # Application ASP.NET Core
 
-API minimale (.NET 10, ASP.NET Core Minimal APIs), écrite et testée en
-local. **Pas encore déployée sur l'ASG** — le launch template du module
-`compute` fait toujours tourner le stub Python de test
-(cf. `infra/modules/compute/main.tf`). Le câblage réel (artefact publié,
-user-data mis à jour, remplacement des instances) est une étape distincte,
-qui touche à l'infrastructure déjà en marche.
+API minimale (.NET 10, ASP.NET Core Minimal APIs). **Déployée et vérifiée en
+production** : `curl` sur l'ALB confirme `/`, `/health` et `/db-check` tous
+`200`, ce dernier avec une vraie connexion RDS de bout en bout
+(`{"status":"ok","latency_ms":396}`).
 
 ## Endpoints
 
@@ -62,12 +60,41 @@ dotnet run
 curl http://localhost:8080/db-check
 ```
 
-## Déploiement envisagé
+## Déploiement
 
 Publication en artefact autonome (`dotnet publish -c Release
---self-contained false`), déposé sur S3, récupéré par le user-data du
-launch template au démarrage de l'instance, lancé via un service systemd.
-Pas de conteneur : ni ECS ni EKS ne sont dans le périmètre de ce projet.
-Reste à écrire : le bucket S3 d'artefact (distinct du bucket d'assets du
-module `edge`), la mise à jour du user-data, et la stratégie de
-remplacement des instances de l'ASG au déploiement d'une nouvelle version.
+--self-contained false`), déposée sur un bucket S3 dédié (distinct du bucket
+d'assets du module `edge`), récupérée par le user-data du launch template au
+démarrage de l'instance, lancée via un service systemd sous un utilisateur
+dédié non-root (`appuser`). Pas de conteneur : ni ECS ni EKS ne sont dans le
+périmètre de ce projet.
+
+```bash
+make deploy-app     # ou .\make.ps1 deploy-app
+```
+
+Publie l'artefact puis déclenche un `instance refresh` sur l'ASG. **Avec
+`asg_min_size = 1` (profil économique), l'instance unique est remplacée
+l'une après l'autre : coupure de service de quelques dizaines de secondes**
+pendant le remplacement. `asg_min_size = 2` (profil démonstration)
+éliminerait cette coupure.
+
+### Panne rencontrée en déploiement réel — ICU manquant sur AL2023
+
+Le premier déploiement a échoué : le service `systemd` bouclait en
+`core-dump`, health check ALB en échec permanent (502). Diagnostic via
+Session Manager (`journalctl -u awssaaapp`) :
+
+```
+Couldn't find a valid ICU package installed on the system.
+```
+
+Amazon Linux 2023 minimal n'embarque pas `libicu`, dont .NET a besoin pour
+la globalisation (formatage de dates, tri de chaînes selon la culture).
+L'app n'utilise aucune fonctionnalité dépendante de la culture : plutôt que
+d'ajouter une dépendance système, `InvariantGlobalization` est activé dans
+`AwsSaaApp.csproj`, doublé par `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`
+dans le service systemd (défense en profondeur — le second suffit seul,
+sans même republier l'artefact). Invisible à `dotnet build`/`dotnet run` en
+local (Windows n'a pas ce problème) : découvert uniquement par un
+déploiement réel sur AL2023.

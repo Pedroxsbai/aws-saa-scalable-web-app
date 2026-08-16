@@ -33,6 +33,11 @@ output "app_role_arn" {
   value       = aws_iam_role.app.arn
 }
 
+output "artifact_bucket_name" {
+  description = "Bucket S3 des artefacts de déploiement (dotnet publish). Cible de `make deploy-app`."
+  value       = aws_s3_bucket.artifacts.id
+}
+
 output "waf_web_acl_arn" {
   description = "ARN du Web ACL WAFv2, vide si enable_waf = false."
   value       = var.enable_waf ? aws_wafv2_web_acl.alb[0].arn : null

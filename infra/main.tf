@@ -68,10 +68,14 @@ module "compute" {
   asg_target_cpu_utilization = var.asg_target_cpu_utilization
 
   db_secret_arn = module.data.db_secret_arn
+  db_address    = module.data.db_address
+  db_port       = module.data.db_port
+  db_name       = var.db_name
 
   enable_waf                 = var.enable_waf
   enable_detailed_monitoring = var.enable_detailed_monitoring
   log_retention_days         = var.log_retention_days
+  s3_force_destroy           = var.s3_force_destroy
 }
 
 module "edge" {

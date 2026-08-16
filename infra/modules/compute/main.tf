@@ -9,6 +9,67 @@ data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
+data "aws_region" "current" {}
+
+# ===========================================================================
+# Bucket S3 d'artefacts de déploiement
+#
+# Distinct du bucket d'assets statiques du module edge : celui-ci porte le
+# livrable `dotnet publish` (zip), pas des fichiers servis au public.
+# Jamais accessible publiquement — seul le rôle d'instance peut le lire.
+#
+# L'objet lui-même (releases/latest.zip) N'EST PAS géré par Terraform : le
+# publier à chaque `apply` sans changement de code ferait un no-op bruyant,
+# et un changement de code ne doit pas nécessiter de plan Terraform. Publié
+# par `make deploy-app` (dotnet publish + aws s3 cp), en dehors du state.
+# ===========================================================================
+
+resource "aws_s3_bucket" "artifacts" {
+  bucket        = "${var.name_prefix}-artifacts-${random_id.artifacts_suffix.hex}"
+  force_destroy = var.s3_force_destroy
+
+  tags = {
+    Name = "${var.name_prefix}-artifacts"
+  }
+}
+
+resource "random_id" "artifacts_suffix" {
+  byte_length = 4
+}
+
+resource "aws_s3_bucket_versioning" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  # Permet de revenir à l'artefact précédent (aws s3api copy-object depuis
+  # une version antérieure) sans avoir eu besoin de le republier.
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_iam_role_policy" "app_artifact_read" {
+  name = "${var.name_prefix}-app-artifact-read"
+  role = aws_iam_role.app.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject"]
+      Resource = "${aws_s3_bucket.artifacts.arn}/*"
+    }]
+  })
+}
+
 # ===========================================================================
 # Application Load Balancer
 # ===========================================================================
@@ -166,48 +227,67 @@ resource "aws_launch_template" "app" {
     }
   }
 
-  # PLACEHOLDER : l'application ASP.NET Core n'est pas encore écrite
-  # (cf. app/README.md). Ce script fait tourner un serveur HTTP minimal en
-  # Python, préinstallé sur Amazon Linux 2023, qui répond 200 sur toute
-  # route — de quoi valider l'ALB, le target group et l'ASG de bout en bout
-  # sans dépendre du code applicatif. À remplacer par le vrai déploiement
-  # (récupération de l'artefact publié, service systemd dotnet) dès que
-  # l'application existe.
+  # Récupère l'artefact publié (dotnet publish, zippé) depuis S3, installe
+  # le runtime ASP.NET Core (téléchargé depuis Internet — nécessite une
+  # sortie NAT ; indisponible en nat_mode = "endpoints" sans AMI
+  # pré-construite, cf. modules/networking/README.md), et lance l'app comme
+  # service systemd sous un utilisateur dédié non-root.
+  #
+  # DB_SECRET_ARN transite en clair dans l'environnement du service : ce
+  # n'est qu'un pointeur, jamais le secret déchiffré lui-même (résolu par
+  # l'application à l'exécution via son rôle IAM). Voir app/README.md.
   user_data = base64encode(<<-EOT
     #!/bin/bash
     set -euxo pipefail
 
-    cat > /opt/health-stub.py <<'PY'
-    import http.server
+    dnf install -y unzip
 
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"ok")
+    # Runtime ASP.NET Core seul (pas le SDK complet) via le script officiel
+    # Microsoft — AL2023 ne publie pas de paquet dotnet dans ses dépôts par
+    # défaut. Installé dans /opt, pas /usr/local, pour rester isolé du
+    # système.
+    curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+    bash /tmp/dotnet-install.sh --channel 10.0 --runtime aspnetcore --install-dir /opt/dotnet
+    ln -sf /opt/dotnet/dotnet /usr/local/bin/dotnet
 
-        def log_message(self, *args):
-            pass
+    id -u appuser &>/dev/null || useradd --system --no-create-home --shell /sbin/nologin appuser
 
-    http.server.HTTPServer(("0.0.0.0", ${var.app_port}), Handler).serve_forever()
-    PY
+    mkdir -p /opt/app
+    aws s3 cp "s3://${aws_s3_bucket.artifacts.id}/releases/latest.zip" /tmp/app.zip --region ${data.aws_region.current.name}
+    unzip -o /tmp/app.zip -d /opt/app
+    rm -f /tmp/app.zip
+    chown -R appuser:appuser /opt/app
 
-    cat > /etc/systemd/system/health-stub.service <<'UNIT'
+    cat > /etc/systemd/system/awssaaapp.service <<UNIT
     [Unit]
-    Description=Placeholder health endpoint (remplace par le service .NET)
+    Description=Application ASP.NET Core aws-saa-manara
     After=network.target
 
     [Service]
-    ExecStart=/usr/bin/python3 /opt/health-stub.py
+    Type=simple
+    User=appuser
+    WorkingDirectory=/opt/app
+    ExecStart=/opt/dotnet/dotnet /opt/app/AwsSaaApp.dll
     Restart=always
+    RestartSec=5
+    Environment=APP_PORT=${var.app_port}
+    Environment=DB_HOST=${var.db_address}
+    Environment=DB_PORT=${var.db_port}
+    Environment=DB_NAME=${var.db_name}
+    Environment=DB_SECRET_ARN=${var.db_secret_arn}
+    Environment=ASPNETCORE_ENVIRONMENT=Production
+    # AL2023 minimal n'a pas libicu installé ; sans ça .NET échoue au
+    # démarrage (FailFast "Couldn't find a valid ICU package"). L'app ne
+    # fait aucun formatage dépendant de la culture : mode invariant plutôt
+    # que d'ajouter une dépendance système.
+    Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
     [Install]
     WantedBy=multi-user.target
     UNIT
 
     systemctl daemon-reload
-    systemctl enable --now health-stub
+    systemctl enable --now awssaaapp
   EOT
   )
 
@@ -236,8 +316,12 @@ resource "aws_autoscaling_group" "app" {
 
   # ELB plutôt qu'EC2 : une instance dont le processus a planté mais dont le
   # système répond toujours doit être remplacée, pas considérée saine.
-  health_check_type         = "ELB"
-  health_check_grace_period = 60
+  health_check_type = "ELB"
+  # 180s : le user_data télécharge et installe le runtime ASP.NET Core
+  # depuis Internet avant de démarrer le service — plus long que l'ancien
+  # stub Python préinstallé. Une valeur trop courte remplacerait des
+  # instances saines mais encore en train de démarrer.
+  health_check_grace_period = 180
 
   launch_template {
     id      = aws_launch_template.app.id

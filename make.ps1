@@ -17,15 +17,26 @@
 param(
     [Parameter(Position = 0)]
     [ValidateSet('help', 'init', 'fmt', 'fmt-check', 'validate', 'plan',
-        'apply', 'destroy', 'docs', 'check', 'cost', 'clean')]
+        'apply', 'destroy', 'docs', 'check', 'cost', 'clean',
+        'publish-app', 'deploy-app')]
     [string]$Target = 'help'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $InfraDir = Join-Path $PSScriptRoot 'infra'
+$AppDir   = Join-Path $PSScriptRoot 'app'
 $PlanFile = 'tfplan'
 $PlanPath = Join-Path $InfraDir $PlanFile
+
+function Get-TerraformOutput {
+    param([string]$Name)
+    $value = & terraform "-chdir=$InfraDir" output -raw $Name
+    if ($LASTEXITCODE -ne 0) {
+        throw "Impossible de lire l'output Terraform '$Name'. La stack est-elle appliquee ?"
+    }
+    return $value
+}
 
 function Invoke-Terraform {
     param([string[]]$Arguments)
@@ -61,9 +72,11 @@ switch ($Target) {
             'apply      applique le plan enregistre'
             'destroy    detruit TOUTE la stack (confirmation demandee)'
             'docs       regenere les README des modules via terraform-docs'
-            'check      fmt-check + validate + plan'
-            'cost       estimation mensuelle via infracost'
-            'clean      supprime les artefacts locaux'
+            'check       fmt-check + validate + plan'
+            'cost        estimation mensuelle via infracost'
+            'clean       supprime les artefacts locaux'
+            'publish-app dotnet publish + upload vers le bucket S3 d''artefacts'
+            'deploy-app  publish-app puis remplace les instances de l''ASG'
         ) | ForEach-Object { Write-Host "    $_" }
         Write-Host ''
     }
@@ -130,5 +143,48 @@ switch ($Target) {
         Remove-Item (Join-Path $InfraDir '.terraform') -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $PlanPath -Force -ErrorAction SilentlyContinue
         Write-Host "Artefacts locaux supprimes. Relancer '.\make.ps1 init' avant tout plan."
+    }
+
+    'publish-app' {
+        $bucket = Get-TerraformOutput 'artifact_bucket_name'
+        $region = Get-TerraformOutput 'region'
+
+        $publishDir = Join-Path $AppDir 'publish'
+        $zipPath = Join-Path $AppDir 'release.zip'
+        Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+
+        & dotnet publish $AppDir -c Release -o $publishDir --self-contained false
+        if ($LASTEXITCODE -ne 0) { throw "dotnet publish a echoue" }
+
+        Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zipPath
+
+        & aws s3 cp $zipPath "s3://$bucket/releases/latest.zip" --region $region
+        if ($LASTEXITCODE -ne 0) { throw "upload S3 echoue" }
+
+        Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+
+        Write-Host "Publie : s3://$bucket/releases/latest.zip" -ForegroundColor Green
+    }
+
+    'deploy-app' {
+        & $PSCommandPath publish-app
+        if ($LASTEXITCODE -ne 0) { throw "publish-app a echoue" }
+
+        $asgName = Get-TerraformOutput 'asg_name'
+        $region = Get-TerraformOutput 'region'
+
+        Write-Host "Declenchement d'un instance refresh sur $asgName..." -ForegroundColor Cyan
+        Write-Host "ATTENTION : avec asg_min_size=1 (profil economique), l'instance" -ForegroundColor Yellow
+        Write-Host "unique est remplacee -> coupure de service de quelques dizaines" -ForegroundColor Yellow
+        Write-Host "de secondes pendant le remplacement." -ForegroundColor Yellow
+
+        & aws autoscaling start-instance-refresh --auto-scaling-group-name $asgName `
+            --region $region `
+            --preferences '{"MinHealthyPercentage":0,"InstanceWarmup":180}'
+        if ($LASTEXITCODE -ne 0) { throw "start-instance-refresh a echoue" }
+
+        Write-Host "Suivre la progression : aws autoscaling describe-instance-refreshes --auto-scaling-group-name $asgName --region $region"
     }
 }

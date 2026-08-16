@@ -16,14 +16,14 @@ lacunes de scoping IAM, invisibles en local, n'ont été découvertes que par
 ces runs réels et sont documentées telles quelles dans
 [ADR-003](docs/adr/003-cicd-oidc-deux-roles.md).
 
-**L'application ASP.NET Core (`app/`) est écrite et testée en local**
-(`GET /`, `/health`, `/db-check` — ce dernier vérifié en échec propre sans
-PostgreSQL local ; le chemin de succès sera confirmé au câblage réel).
-**Pas encore déployée** : l'ASG tourne toujours avec le stub Python de test.
-Le câblage (artefact publié sur S3, user-data mis à jour, remplacement des
-instances) reste à faire — c'est un changement touchant l'infra déjà en
-marche, traité comme une étape à part. Détail dans
-[`app/README.md`](app/README.md).
+**L'application ASP.NET Core (`app/`) est déployée en production et vérifiée
+de bout en bout** : `curl` sur l'ALB confirme `/`, `/health` et `/db-check`
+tous `200`, ce dernier avec une vraie connexion RDS
+(`{"status":"ok","latency_ms":396}`). Publication via bucket S3 dédié +
+service systemd (`make deploy-app`). Une panne réelle rencontrée au premier
+déploiement — .NET refusait de démarrer sur AL2023 minimal, faute de
+`libicu` — corrigée en `InvariantGlobalization`, invisible en local (Windows
+n'a pas ce problème). Détail dans [`app/README.md`](app/README.md).
 
 **Pourquoi `eu-west-1` et pas `eu-west-3` :** le compte AWS utilisé est en
 "Free Plan", qui plafonne le nombre d'instances RDS **par région**,
@@ -60,7 +60,7 @@ aws-saa-scalable-web-app/
 │   └── workflows/
 │       ├── plan.yml                 # PR -> fmt-check, validate, plan (lecture seule)
 │       └── apply.yml                # push main -> apply automatique
-├── app/                              # ASP.NET Core (.NET 10), ecrite/testee en local, non deployee
+├── app/                              # ASP.NET Core (.NET 10), deployee et verifiee en production
 │   ├── AwsSaaApp.csproj
 │   ├── Program.cs                   # endpoints /, /health, /db-check
 │   ├── Services/
@@ -107,10 +107,9 @@ publics, protégé optionnellement par un **Web ACL WAFv2** portant les règles
 managées AWS (`enable_waf`, `false` par défaut). Il répartit la charge sur un
 **Auto Scaling Group** d'instances EC2 dans les subnets privés applicatifs,
 avec une politique de scaling par suivi de cible sur le CPU. L'application
-ASP.NET Core (`app/`) existe et est testée en local, mais le launch template
-fait toujours tourner le stub HTTP de test qui répond `200` — de quoi
-valider l'ALB, le target group et l'ASG de bout en bout sans dépendre du
-câblage applicatif final (détail dans le
+ASP.NET Core (`app/`) y est déployée en production : publiée sur un bucket
+S3 dédié, récupérée par le user-data au démarrage, lancée en service
+systemd (détail dans le
 [README du module compute](infra/modules/compute/README.md) et
 [`app/README.md`](app/README.md)).
 
@@ -244,6 +243,8 @@ Cibles disponibles :
 | `docs` | régénère les README de modules via terraform-docs |
 | `check` | `fmt-check` + `validate` + `plan` — à lancer avant commit |
 | `cost` | estimation mensuelle via infracost |
+| `publish-app` | `dotnet publish` + upload vers le bucket S3 d'artefacts |
+| `deploy-app` | `publish-app` puis remplace les instances de l'ASG (instance refresh) |
 | `clean` | supprime `.terraform/` et le plan local |
 
 `apply` exige un plan préalable : aucune application ne se fait sur un diff
@@ -449,7 +450,7 @@ rien démontrer de neuf.
 | 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique ; migration eu-west-3 → eu-west-1 | ✅ déployée et testée sur AWS (`curl` → 200), RDS inclus |
 | 4 | Modules `edge` et `observability` : S3, CloudFront optionnel, SNS, alarmes, dashboard, budget filtré par tag | ✅ déployée (`terraform apply` : 15 ressources, 0 erreur) |
 | 5 | CI/CD GitHub Actions avec OIDC (2 rôles, plan sur PR, apply sur push main) | ✅ déployée |
-| 6 | Application ASP.NET Core (`/`, `/health`, `/db-check`, Secrets Manager) | ✅ écrite et testée en local, ⏳ pas encore déployée sur l'ASG |
+| 6 | Application ASP.NET Core déployée en production (bucket S3, user-data, systemd) | ✅ déployée et vérifiée sur AWS (`curl /db-check` → RDS réelle, 200) |
 
 ## Décisions d'architecture
 

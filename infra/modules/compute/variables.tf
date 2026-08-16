@@ -67,6 +67,27 @@ variable "db_secret_arn" {
   type        = string
 }
 
+variable "db_address" {
+  description = "Nom d'hôte de l'instance RDS (sans port), fourni par le module data. Injecté dans l'environnement de l'application (DB_HOST)."
+  type        = string
+}
+
+variable "db_port" {
+  description = "Port PostgreSQL, fourni par le module data. Injecté dans l'environnement de l'application (DB_PORT)."
+  type        = number
+}
+
+variable "db_name" {
+  description = "Nom de la base applicative. Injecté dans l'environnement de l'application (DB_NAME)."
+  type        = string
+}
+
+variable "s3_force_destroy" {
+  description = "Autorise la destruction du bucket d'artefacts même s'il contient des objets."
+  type        = bool
+  default     = true
+}
+
 variable "enable_waf" {
   description = "Attache un Web ACL WAFv2 (règles managées AWS) à l'ALB."
   type        = bool

@@ -32,6 +32,11 @@ output "asg_name" {
   value       = module.compute.asg_name
 }
 
+output "artifact_bucket_name" {
+  description = "Bucket S3 des artefacts de déploiement. Cible de `make deploy-app`."
+  value       = module.compute.artifact_bucket_name
+}
+
 output "db_endpoint" {
   description = "Endpoint de connexion RDS, host:port. Joignable uniquement depuis le SG applicatif."
   value       = module.data.db_endpoint
