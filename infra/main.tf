@@ -98,3 +98,5 @@ module "observability" {
   budget_limit_usd        = var.budget_limit_usd
   budget_alert_thresholds = var.budget_alert_thresholds
 }
+
+# Commit de test : valide le workflow plan.yml (lecture seule). A merger/fermer sans impact reel.
