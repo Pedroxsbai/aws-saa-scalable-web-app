@@ -50,13 +50,15 @@ de tfvars, pas un changement de code.
 
 ### Valeur par défaut
 
-`"gateway"`, parce que c'est la réponse attendue à la certification et la seule
-que l'on puisse présenter à un jury sans réserve. Le mode par défaut doit être
-le mode correct ; les modes économiques sont des dérogations explicites, prises
-en connaissance de cause pendant les phases d'itération.
+`"instance"` (amendé le 2026-08-16, cf. section *Amendement* ci-dessous) :
+~3 USD/mois, contre ~32 pour `"gateway"`. Le mode par défaut du projet est
+désormais le mode le moins cher, sur demande explicite de minimiser le coût
+pour l'ensemble des sessions restantes. `"gateway"` reste implémenté et
+disponible pour le profil « démonstration jury ».
 
-`nat_high_availability = false` en revanche : un seul NAT, dans l'AZ « a ».
-C'est un SPOF assumé et documenté (voir *Conséquences*).
+`nat_high_availability = false` : un seul NAT, dans l'AZ « a ». C'est un SPOF
+assumé et documenté (voir *Conséquences*), qui s'ajoute à celui déjà inhérent
+au mode `instance`.
 
 ## Alternatives écartées
 
@@ -118,6 +120,24 @@ variable dès la session 1 fige au contraire l'interface du module avant d'en
   sortie Internet les instances de l'AZ « b », alors même que l'ALB et l'ASG
   continueraient de fonctionner. La HA de la stack est donc **partielle** et
   doit être présentée comme telle : c'est un arbitrage de coût, pas un oubli.
+
+## Amendement — 2026-08-16
+
+Le défaut est passé de `"gateway"` à `"instance"` à la demande explicite du
+propriétaire du projet : minimiser le coût courant sur l'ensemble des sessions
+restantes, plutôt que de présenter par défaut le mode « recommandé examen ».
+
+Conséquence sur l'analyse ci-dessus, qui reste valable par ailleurs : le SPOF
+de l'instance NAT (restauration manuelle en cas de panne) est désormais le
+comportement par défaut du projet, et non plus une dérogation ponctuelle
+d'itération. Il est compensé par le fait que la stack tout entière est censée
+passer le plus clair de son temps détruite (`make destroy` entre sessions) —
+la disponibilité de la NAT importe surtout pendant les fenêtres de travail
+actif, où une panne se remarque et se corrige immédiatement.
+
+Le profil `"gateway"` + `nat_high_availability = true` reste la configuration
+à activer pour la démonstration finale au jury, où la robustesse prime sur le
+coût d'une exécution de quelques heures.
 
 ## Suivi
 

@@ -1,9 +1,9 @@
 # Modules Terraform
 
-Ce répertoire est vide à dessein en fin de session 1. Il accueillera cinq
-modules locaux, écrits au fil des sessions suivantes. Aucun module externe
-(registry public) n'est prévu : l'objectif pédagogique est d'écrire les
-ressources à la main pour la préparation de la certification.
+Cinq modules locaux prévus, écrits au fil des sessions. Aucun module externe
+(registry public) : l'objectif pédagogique est d'écrire les ressources à la
+main pour la préparation de la certification. `networking`, `data` et
+`compute` sont écrits (session 3) ; `edge` et `observability` restent à venir.
 
 ## Conventions communes
 
@@ -28,49 +28,22 @@ Règles :
 - Toute ressource facturée à l'heure est pilotable par un `count`/`for_each`
   branché sur une variable d'activation, pour que le coût reste maîtrisable.
 
+## Modules écrits
+
+### `networking`
+
+Voir [`networking/README.md`](networking/README.md).
+
+### `data`
+
+Voir [`data/README.md`](data/README.md).
+
+### `compute`
+
+Voir [`compute/README.md`](compute/README.md). Utilise un stub HTTP en
+placeholder tant que `app/` n'existe pas.
+
 ## Modules prévus
-
-### `networking` — session 2
-
-Le socle réseau. Tout le reste en dépend.
-
-- VPC, Internet Gateway
-- 6 subnets : 2 publics, 2 privés applicatifs, 2 privés données
-- Tables de routage et associations
-- Implémentation des trois branches de `nat_mode` : NAT Gateway, instance NAT,
-  ou VPC endpoints seuls (cf. `docs/adr/001-nat-mode-variable.md`)
-- VPC endpoints SSM / SSMMessages / EC2Messages — requis par Session Manager
-  puisqu'il n'y a pas de bastion
-- Security groups de base et NACL
-
-Sorties : `vpc_id`, `public_subnet_ids`, `private_app_subnet_ids`,
-`private_data_subnet_ids`.
-
-### `compute` — session 3
-
-La couche applicative exposée.
-
-- Application Load Balancer, listener, target group, health checks
-- Launch template (Amazon Linux 2023, user-data installant le runtime .NET)
-- Auto Scaling Group réparti sur les AZ privées applicatives
-- Politique de scaling par suivi de cible sur le CPU
-- Rôle IAM d'instance + instance profile (`AmazonSSMManagedInstanceCore`)
-- Web ACL WAFv2 de scope REGIONAL attaché à l'ALB
-
-Sorties : `alb_dns_name`, `alb_zone_id`, `asg_name`, `instance_role_arn`.
-
-### `data` — session 3
-
-La persistance.
-
-- Subnet group RDS sur les subnets privés données
-- Instance PostgreSQL, `multi_az` piloté par variable
-- Mot de passe maître géré par Secrets Manager
-  (`manage_master_user_password`), donc absent du state
-- Security group n'autorisant le 5432 que depuis le SG applicatif
-- Fenêtres de sauvegarde et de maintenance
-
-Sorties : `db_endpoint`, `db_secret_arn`, `db_security_group_id`.
 
 ### `edge` — session 4
 

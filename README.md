@@ -5,10 +5,15 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 2 sur ~5 — module `networking` écrit.** Le socle réseau est
-codé et validé (`terraform validate`), mais **aucun `terraform apply` n'a
-encore été exécuté** : rien n'existe côté AWS. Les modules `compute`, `data`,
-`edge` et `observability` restent à écrire.
+**Statut : session 3 sur ~5 — networking, data, compute écrits.** VPC, RDS,
+ALB et ASG sont codés et validés (`terraform validate`), mais **aucun
+`terraform apply` n'a encore été exécuté** : rien n'existe côté AWS. Les
+modules `edge` et `observability` restent à écrire.
+
+**Profil par défaut : économie maximale.** `nat_mode = "instance"`,
+`enable_waf = false`, `enable_cloudfront = false`, `asg_min_size = 1`,
+`multi_az = false`. Voir la section « Coûts estimés » pour les compromis que
+ces défauts impliquent et comment basculer vers un profil de démonstration.
 
 ---
 
@@ -47,7 +52,9 @@ aws-saa-scalable-web-app/
 │   ├── terraform.tfvars.example     # modèle de configuration locale
 │   └── modules/
 │       ├── README.md                # périmètre des 5 modules
-│       └── networking/              # VPC, subnets, routage, NAT, endpoints
+│       ├── networking/              # VPC, subnets, routage, NAT, endpoints
+│       ├── data/                    # instance RDS PostgreSQL
+│       └── compute/                 # ALB, ASG, WAF optionnel
 ├── Makefile                         # cycle de vie (référence, utilisé en CI)
 ├── make.ps1                         # équivalent PowerShell pour poste Windows
 ├── .gitignore
@@ -62,10 +69,14 @@ Diagramme : `docs/diagrams/` *(à produire en session 2, une fois le module
 `networking` écrit)*.
 
 Le trafic entre par un **Application Load Balancer** placé dans les subnets
-publics, protégé par un **Web ACL WAFv2** portant les règles managées AWS. Il
-répartit la charge sur un **Auto Scaling Group** d'instances EC2 réparties dans
-les subnets privés applicatifs des deux AZ, avec une politique de scaling par
-suivi de cible sur le CPU.
+publics, protégé optionnellement par un **Web ACL WAFv2** portant les règles
+managées AWS (`enable_waf`, `false` par défaut). Il répartit la charge sur un
+**Auto Scaling Group** d'instances EC2 dans les subnets privés applicatifs,
+avec une politique de scaling par suivi de cible sur le CPU. Tant que
+`app/` ne contient pas encore l'application ASP.NET Core, le launch template
+fait tourner un stub HTTP minimal qui répond `200` — de quoi valider l'ALB, le
+target group et l'ASG de bout en bout (détail dans le
+[README du module compute](infra/modules/compute/README.md)).
 
 Les instances joignent une base **RDS PostgreSQL** isolée dans une troisième
 paire de subnets privés, sans aucune route vers Internet. Le mot de passe
@@ -79,8 +90,10 @@ certificat `*.cloudfront.net` par défaut et l'ALB reste joignable sur son DNS
 AWS — pas de Route 53, pas d'ACM.
 
 L'accès administrateur aux instances passe par **Session Manager**, jamais par
-SSH : pas de bastion, pas de key pair, pas de port 22 ouvert. Cela impose des
-VPC endpoints SSM, qui sont créés quel que soit le mode de sortie retenu.
+SSH : pas de bastion, pas de key pair, pas de port 22 ouvert. En mode
+`nat_mode = "endpoints"`, cela impose des VPC endpoints SSM ; avec un NAT
+(gateway ou instance), le trafic SSM passe simplement par le NAT et ces
+endpoints ne sont pas créés par défaut (`enable_ssm_endpoints = false`).
 
 La sortie Internet des subnets privés est réglable par la variable `nat_mode`
 (`gateway` | `instance` | `endpoints`) — c'est le principal levier de coût du
@@ -230,35 +243,47 @@ traiter à la main.
 ## Coûts estimés
 
 Compte de formation crédité de **200 USD**, à faire durer sur environ cinq
-sessions. Estimations pour `eu-west-3`, hors free tier et hors transfert
-sortant, **si la stack tourne un mois entier** :
+sessions. **Les défauts du projet sont réglés sur le profil le moins cher
+possible** : `nat_mode = "instance"`, `enable_waf = false`,
+`enable_cloudfront = false`, `asg_min_size = asg_desired_capacity = 1`,
+`multi_az = false`, `enable_ssm_endpoints = false`. Deux profils, estimés pour
+`eu-west-3`, hors free tier et hors transfert sortant, **si la stack tourne un
+mois entier** :
 
-| Poste | Configuration par défaut | Coût mensuel |
+| Poste | Profil économique (défaut) | Profil démonstration (jury) |
 |---|---|---|
-| NAT Gateway | 1 seule, AZ a | ~32 USD |
-| EC2 ASG | 2 × `t3.micro` | ~15 USD (0 si free tier) |
-| ALB | 1, faible trafic | ~18 USD |
-| RDS PostgreSQL | `db.t4g.micro`, mono-AZ, 20 Go | ~13 USD (0 si free tier) |
-| WAF | 1 Web ACL + règles managées | ~6 USD |
-| CloudFront | trafic de démonstration | < 1 USD |
-| VPC endpoints d'interface | aucun par défaut (SSM passe par le NAT) | 0 USD |
-| S3, CloudWatch, SNS | volumes marginaux, endpoint S3 gratuit | ~2 USD |
-| Backend de state | S3 + DynamoDB | < 0,10 USD |
-| **Total** | | **~85 USD/mois** |
+| Sortie Internet privée | instance NAT `t4g.nano` : ~3 USD | NAT Gateway HA (2 AZ) : ~64 USD |
+| ALB | socle fixe, indépendant du trafic | ~18 USD | ~18 USD |
+| EC2 ASG | 1 × `t3.micro` : ~7,50 USD (0 si free tier) | 2 × `t3.micro` : ~15 USD (0 si free tier) |
+| RDS PostgreSQL | `db.t4g.micro` mono-AZ, 20 Go : ~13 USD (0 si free tier) | Multi-AZ : ~26 USD |
+| WAF | désactivé : 0 USD | 1 Web ACL + règles managées : ~6 USD |
+| CloudFront | désactivé : 0 USD | trafic de démonstration : < 1 USD |
+| VPC endpoints d'interface | aucun (SSM passe par le NAT) : 0 USD | idem : 0 USD (endpoint S3 seul reste gratuit) |
+| S3, CloudWatch, SNS | volumes marginaux : ~2 USD | ~2 USD |
+| Backend de state | S3 + DynamoDB : < 0,10 USD | idem |
+| **Total** | **~26 USD/mois** | **~135 USD/mois** |
 
-Autrement dit : **la stack laissée en marche consomme le crédit en un peu plus
-de deux mois.** D'où les règles de travail suivantes.
+Basculer d'un profil à l'autre est un changement de `terraform.tfvars`, pas de
+code — les deux profils sont documentés dans
+`infra/terraform.tfvars.example`. À ~26 USD/mois, le crédit tient
+**près de 8 mois** en laissant tourner la stack en continu ; largement de quoi
+couvrir les cinq sessions même sans discipline de `destroy` parfaite. Le
+profil démonstration reste réservé à la présentation finale au jury, sur une
+durée courte.
 
 **Leviers, par ordre d'efficacité :**
 
-1. `make destroy` à la fin de chaque session — de loin le plus important. Une
-   stack détruite coûte zéro.
-2. `nat_mode = "instance"` pendant les phases d'itération : ~29 USD/mois
-   économisés à lui seul.
-3. `enable_cloudfront = false` en développement : accessoirement ~15 minutes
-   gagnées à chaque cycle apply/destroy.
+1. `make destroy` à la fin de chaque session — de loin le plus important,
+   quel que soit le profil. Une stack détruite coûte zéro.
+2. `nat_mode = "instance"` (défaut) plutôt que `"gateway"` : ~29 USD/mois
+   économisés à lui seul, c'était le plus gros poste fixe.
+3. `enable_cloudfront = false` (défaut) en développement : accessoirement
+   ~15 minutes gagnées à chaque cycle apply/destroy.
 4. `multi_az = false` (défaut) : Multi-AZ double le coût RDS.
-5. `enable_waf = false` tant que la sécurité applicative n'est pas le sujet.
+5. `enable_waf = false` (défaut) tant que la sécurité applicative n'est pas
+   le sujet.
+6. `asg_min_size = asg_desired_capacity = 1` (défaut) : pas de redondance
+   inter-AZ, mais une seule instance facturée.
 
 **Piège à connaître :** un VPC endpoint d'interface est facturé par ENI, donc
 **par AZ** — ~7,50 USD/mois chacun, ~15 USD sur 2 AZ. Les trois endpoints SSM
@@ -266,11 +291,12 @@ coûteraient donc plus cher qu'une NAT Gateway. Ils ne sont créés que si
 `enable_ssm_endpoints = true`, ou automatiquement en mode
 `nat_mode = "endpoints"` où ils sont indispensables. Corollaire :
 **`nat_mode = "endpoints"` n'est pas le mode le moins cher sur 2 AZ**, il est
-le plus sûr. Détail dans le [README du module networking](infra/modules/networking/README.md).
+le plus sûr — le mode le moins cher reste `"instance"`. Détail dans le
+[README du module networking](infra/modules/networking/README.md).
 
 Le budget AWS Budgets configuré par la stack alerte à 50 %, 80 % et 100 % de
-`budget_limit_usd` (40 USD par défaut). **Il alerte seulement : AWS Budgets
-n'arrête rien tout seul.**
+`budget_limit_usd` (**25 USD par défaut**, cohérent avec le profil
+économique). **Il alerte seulement : AWS Budgets n'arrête rien tout seul.**
 
 ---
 
@@ -280,11 +306,24 @@ Ces choix sont des compromis conscients, pas des oublis. Ils sont listés ici
 parce qu'un projet d'architecture se juge autant sur ce qu'il assume que sur ce
 qu'il implémente.
 
-**Un seul NAT, donc haute disponibilité partielle.** `nat_high_availability`
-est à `false` : la perte de l'AZ « a » prive de sortie Internet les instances
-de l'AZ « b », alors même que l'ALB et l'ASG continueraient de servir le
-trafic. Un second NAT coûterait ~32 USD/mois pour un scénario de panne qui ne
-sera jamais exercé. Détail dans [ADR-001](docs/adr/001-nat-mode-variable.md).
+**Sortie Internet par instance NAT, pas par NAT Gateway.** `nat_mode =
+"instance"` par défaut : ~3 USD/mois contre ~32 pour une NAT Gateway, mais
+c'est un SPOF non managé — si l'instance tombe, restauration manuelle. Un
+seul NAT de surcroît (`nat_high_availability = false`) : la perte de l'AZ
+« a » prive de sortie Internet les instances de l'AZ « b », alors même que
+l'ALB et l'ASG continueraient de servir le trafic. Détail et matrice de coût
+dans [ADR-001](docs/adr/001-nat-mode-variable.md).
+
+**Une seule instance applicative.** `asg_min_size = asg_desired_capacity = 1`
+par défaut : aucune redondance inter-AZ tant que la politique de scaling n'a
+pas déclenché de montée en charge. Passer à 2 restaure la HA démontrée à
+l'examen, au prix de ~7,50 USD/mois supplémentaires.
+
+**WAF et CloudFront désactivés par défaut.** `enable_waf = false` (module
+`compute`, code déjà écrit, prêt à activer via `terraform.tfvars`) et
+`enable_cloudfront = false` (module `edge`, à écrire en session 4) : aucune
+des deux ne tourne par défaut, pour garder le profil économique sous les
+~30 USD/mois.
 
 **RDS mono-AZ par défaut.** Le basculement Multi-AZ est le mécanisme de HA que
 la certification met le plus en avant, mais il double le coût de la base.
@@ -316,6 +355,12 @@ possible pour l'ALB : le listener reste en HTTP. C'est acceptable pour une
 démonstration, jamais pour du trafic réel. CloudFront, lui, sert bien en HTTPS
 via son certificat par défaut.
 
+**Stub HTTP en lieu et place de l'application.** `app/` ne contient pas
+encore de code ASP.NET Core. Le launch template du module `compute` déploie
+un serveur Python minimal répondant `200` sur `/health`, pour valider l'ALB
+et l'ASG dès maintenant. Ce n'est pas l'application finale : c'est un moyen de
+tester l'infrastructure sans attendre que le code applicatif existe.
+
 **Un seul environnement.** Pas de séparation dev/staging/prod : la variable
 `environment` existe et préfixe déjà toutes les ressources, mais un seul jeu
 d'infrastructure est déployé. Le multi-environnement multiplierait le coût sans
@@ -329,7 +374,7 @@ rien démontrer de neuf.
 |---|---|---|
 | 1 | Scaffolding : arborescence, backend, variables, Makefile, ADR-001 | ✅ terminée |
 | 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ écrite, non appliquée |
-| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS | à venir |
+| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique | ✅ écrite, non appliquée |
 | 4 | Modules `edge` et `observability` : S3, CloudFront, alarmes, budget | à venir |
 | 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |
 

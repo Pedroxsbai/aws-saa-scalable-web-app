@@ -22,6 +22,27 @@ output "private_data_subnet_ids" {
   value       = module.networking.private_data_subnet_ids
 }
 
+output "alb_dns_name" {
+  description = "DNS public de l'ALB — point d'entrée de l'application, en HTTP (pas de nom de domaine, pas de HTTPS sur l'ALB)."
+  value       = module.compute.alb_dns_name
+}
+
+output "asg_name" {
+  description = "Nom de l'Auto Scaling Group."
+  value       = module.compute.asg_name
+}
+
+output "db_endpoint" {
+  description = "Endpoint de connexion RDS, host:port. Joignable uniquement depuis le SG applicatif."
+  value       = module.data.db_endpoint
+  sensitive   = true
+}
+
+output "db_secret_arn" {
+  description = "ARN du secret Secrets Manager portant les identifiants RDS."
+  value       = module.data.db_secret_arn
+}
+
 output "nat_mode" {
   description = "Mode de sortie Internet appliqué (cf. ADR-001)."
   value       = module.networking.nat_mode

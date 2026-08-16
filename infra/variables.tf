@@ -158,7 +158,7 @@ variable "nat_mode" {
     Justification du choix et matrice de décision : docs/adr/001-nat-mode-variable.md
   EOT
   type        = string
-  default     = "gateway"
+  default     = "instance" # profil économique : ~3 USD/mois contre ~32 pour "gateway"
 
   validation {
     condition     = contains(["gateway", "instance", "endpoints"], var.nat_mode)
@@ -207,9 +207,9 @@ variable "app_port" {
 }
 
 variable "asg_min_size" {
-  description = "Nombre minimal d'instances dans l'ASG."
+  description = "Nombre minimal d'instances dans l'ASG. À 1 en profil économique : pas de redondance inter-AZ, à relever à 2 pour la démonstration de HA."
   type        = number
-  default     = 2 # une par AZ : survit à la perte d'une AZ
+  default     = 1
 
   validation {
     condition     = var.asg_min_size >= 1
@@ -231,7 +231,7 @@ variable "asg_max_size" {
 variable "asg_desired_capacity" {
   description = "Capacité souhaitée au démarrage. Reprise en main par la politique de scaling ensuite."
   type        = number
-  default     = 2
+  default     = 1
 
   validation {
     condition     = var.asg_desired_capacity >= var.asg_min_size && var.asg_desired_capacity <= var.asg_max_size
@@ -257,9 +257,9 @@ variable "alb_ingress_cidrs" {
 }
 
 variable "enable_waf" {
-  description = "Attache un Web ACL WAFv2 à l'ALB (règles managées AWS). Coût : ~5 USD/mois + par million de requêtes."
+  description = "Attache un Web ACL WAFv2 à l'ALB (règles managées AWS). Coût : ~5 USD/mois + par million de requêtes. false par défaut (profil économique) ; à activer pour la démonstration de sécurité."
   type        = bool
-  default     = true
+  default     = false
 }
 
 
@@ -346,9 +346,9 @@ variable "db_deletion_protection" {
 # ===========================================================================
 
 variable "enable_cloudfront" {
-  description = "Déploie la distribution CloudFront devant le bucket des assets statiques. La désactiver accélère nettement destroy/apply pendant les itérations (une distribution met ~15 min à se déployer)."
+  description = "Déploie la distribution CloudFront devant le bucket des assets statiques. false par défaut (profil économique) : une distribution met ~15 min à se déployer et autant à détruire, ce qui ralentit chaque cycle apply/destroy. À activer pour la démonstration finale."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "cloudfront_price_class" {
@@ -398,7 +398,7 @@ variable "log_retention_days" {
 variable "budget_limit_usd" {
   description = "Plafond mensuel AWS Budgets, en USD. Déclenche une alerte, PAS un arrêt des ressources : AWS Budgets ne coupe rien tout seul."
   type        = number
-  default     = 40
+  default     = 25
 
   validation {
     condition     = var.budget_limit_usd > 0 && var.budget_limit_usd <= 200
