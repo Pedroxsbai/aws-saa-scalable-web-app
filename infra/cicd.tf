@@ -122,6 +122,7 @@ data "aws_iam_policy_document" "provisioning_read" {
       "logs:ListTagsForResource",
       "budgets:ViewBudget",
       "budgets:DescribeBudgetAction*",
+      "budgets:ListTagsForResource",
       "secretsmanager:DescribeSecret",
       "secretsmanager:ListSecrets",
       "ssm:DescribeParameters",
