@@ -15,6 +15,9 @@ bucket = "tfstate-aws-saa-manara-<ACCOUNT_ID>"
 # dev / prod dans le même bucket sans migration de state.
 key = "infra/dev/terraform.tfstate"
 
+# Région du bucket S3 de state (backend), INDÉPENDANTE de var.region qui
+# pilote la région des ressources déployées (eu-west-1). Le bucket a été créé
+# en eu-west-3 et n'a pas besoin d'être déplacé.
 region = "eu-west-3"
 
 # Verrou distant : empêche deux `apply` concurrents (poste local + runner

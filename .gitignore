@@ -140,3 +140,6 @@ id_rsa*
 .env
 .env.local
 *.local
+
+# Config locale Claude Code (settings, verrous de taches planifiees)
+.claude/

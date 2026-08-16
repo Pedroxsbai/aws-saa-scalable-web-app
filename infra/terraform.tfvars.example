@@ -20,7 +20,7 @@
 
 
 # --- Région et AZ ---------------------------------------------------------
-# region      = "eu-west-3"
+# region      = "eu-west-1"  # cf. ADR-002 : eu-west-3 exclue par le quota RDS "Free Plan"
 # az_suffixes = ["a", "b"]
 
 

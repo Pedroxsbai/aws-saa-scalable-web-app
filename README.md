@@ -5,16 +5,19 @@ déploiement d'une application web hautement disponible et scalable sur AWS,
 intégralement décrite en Terraform et livrée par GitHub Actions. Aucune
 ressource n'est créée à la main, à l'exception du backend de state.
 
-**Statut : session 3 sur ~5 — networking et compute déployés sur AWS, RDS en
-attente.** Un premier `terraform apply` a été exécuté avec succès : VPC,
-routage, instance NAT, ALB, target group et ASG (1 instance) tournent
-réellement sur le compte, et l'endpoint `/health` répond `200` en conditions
-réelles. **RDS reste bloqué** : le compte AWS utilisé est en "Free Plan", qui
-plafonne à 2 instances RDS au niveau technique, indépendamment du crédit
-disponible — 2 instances appartenant à d'autres projets occupent déjà ce
-quota. Détail et options dans le
-[README du module data](infra/modules/data/README.md#blocage-connu--free-plan-aws).
-Les modules `edge` et `observability` restent à écrire.
+**Statut : session 3 sur ~5 — stack complète déployée et testée sur AWS en
+`eu-west-1`.** VPC, routage, instance NAT, ALB, target group, ASG **et RDS**
+tournent réellement sur le compte (`terraform apply` réussi, RDS
+`available`), et l'endpoint `/health` répond `200` de bout en bout. Les
+modules `edge` et `observability` restent à écrire.
+
+**Pourquoi `eu-west-1` et pas `eu-west-3` :** le compte AWS utilisé est en
+"Free Plan", qui plafonne le nombre d'instances RDS **par région**,
+indépendamment du crédit disponible et des quotas de service classiques.
+`eu-west-3` était déjà à son plafond à cause de deux autres projets sur le
+même compte ; `eu-west-1` (également UE, conforme RGPD) ne l'était pas.
+Diagnostic complet, preuve CLI et alternatives écartées dans
+[ADR-002](docs/adr/002-region-eu-west-1.md).
 
 **Profil par défaut : économie maximale.** `nat_mode = "instance"`,
 `enable_waf = false`, `enable_cloudfront = false`, `asg_min_size = 1`,
@@ -27,8 +30,8 @@ ces défauts impliquent et comment basculer vers un profil de démonstration.
 
 | | |
 |---|---|
-| Région | `eu-west-3` (Paris) |
-| Zones de disponibilité | 2 (`eu-west-3a`, `eu-west-3b`) |
+| Région | `eu-west-1` (Irlande) — cf. [ADR-002](docs/adr/002-region-eu-west-1.md) |
+| Zones de disponibilité | 2 (`eu-west-1a`, `eu-west-1b`) |
 | Runtime applicatif | ASP.NET Core sur EC2 (Amazon Linux 2023) |
 | Base de données | RDS PostgreSQL 16 |
 | Terraform | ≥ 1.9, provider AWS `~> 5.60` |
@@ -45,7 +48,8 @@ aws-saa-scalable-web-app/
 │   └── README.md                    # application ASP.NET Core (session 3+)
 ├── docs/
 │   ├── adr/
-│   │   └── 001-nat-mode-variable.md # décision sur la sortie Internet privée
+│   │   ├── 001-nat-mode-variable.md # décision sur la sortie Internet privée
+│   │   └── 002-region-eu-west-1.md  # migration de région, quota RDS Free Plan
 │   └── diagrams/                    # diagramme d'architecture (à venir)
 ├── infra/
 │   ├── backend.tf                   # state distant S3 + verrou DynamoDB
@@ -141,8 +145,10 @@ aws configure          # ou un profil nommé : aws configure --profile saa
 aws sts get-caller-identity
 ```
 
-Région cible : `eu-west-3`. L'ID de compte n'est pas versionné : il vit
-uniquement dans `infra/backend.hcl`, ignoré par git.
+Région des ressources déployées : `eu-west-1` (cf. ADR-002). Le bucket de
+state, lui, vit en `eu-west-3` — les deux régions sont indépendantes, voir
+section « Backend de state » ci-dessous. L'ID de compte n'est pas versionné :
+il vit uniquement dans `infra/backend.hcl`, ignoré par git.
 
 ### Backend de state — à créer UNE SEULE FOIS avant le premier `init`
 
@@ -253,7 +259,7 @@ sessions. **Les défauts du projet sont réglés sur le profil le moins cher
 possible** : `nat_mode = "instance"`, `enable_waf = false`,
 `enable_cloudfront = false`, `asg_min_size = asg_desired_capacity = 1`,
 `multi_az = false`, `enable_ssm_endpoints = false`. Deux profils, estimés pour
-`eu-west-3`, hors free tier et hors transfert sortant, **si la stack tourne un
+`eu-west-1`, hors free tier et hors transfert sortant, **si la stack tourne un
 mois entier** :
 
 | Poste | Profil économique (défaut) | Profil démonstration (jury) |
@@ -380,10 +386,11 @@ rien démontrer de neuf.
 |---|---|---|
 | 1 | Scaffolding : arborescence, backend, variables, Makefile, ADR-001 | ✅ terminée |
 | 2 | Module `networking` : VPC, subnets, routage, les 3 modes NAT, endpoints, SG | ✅ écrite, non appliquée |
-| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique | ✅ networking + compute déployés et testés (`curl` → 200) ; RDS bloqué par le Free Plan AWS |
+| 3 | Modules `compute` et `data` : ALB, ASG, WAF, RDS ; défauts basculés sur le profil économique ; migration eu-west-3 → eu-west-1 | ✅ stack complète déployée et testée sur AWS (`curl` → 200), RDS inclus |
 | 4 | Modules `edge` et `observability` : S3, CloudFront, alarmes, budget | à venir |
 | 5 | CI/CD GitHub Actions avec OIDC, diagramme, documentation finale | à venir |
 
 ## Décisions d'architecture
 
 - [ADR-001 — Sortie Internet des subnets privés pilotée par `nat_mode`](docs/adr/001-nat-mode-variable.md)
+- [ADR-002 — Migration de région eu-west-3 → eu-west-1 (quota RDS Free Plan)](docs/adr/002-region-eu-west-1.md)

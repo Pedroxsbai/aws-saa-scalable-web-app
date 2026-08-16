@@ -48,10 +48,19 @@ rôle IAM d'instance un accès en lecture seule au secret, et à lui seul.
 compte ; hors free tier, environ 13 USD/mois. `multi_az = true` double ce
 montant.
 
-## Blocage connu — Free Plan AWS
+## Blocage résolu — migration vers eu-west-1
 
-Sur le compte utilisé pour ce projet, `terraform apply` échoue sur
-`aws_db_instance.this` avec :
+**Résolu le 2026-08-16.** L'instance RDS est déployée et `available` en
+`eu-west-1` (`aws-saa-manara-dev-db`). Le blocage décrit ci-dessous, propre à
+`eu-west-3` sur ce compte, ne s'est pas reproduit après le changement de
+région — confirmant qu'il s'agissait d'un plafond appliqué par région, pas au
+niveau du compte entier. Détail de la décision et des alternatives écartées :
+[ADR-002](../../../docs/adr/002-region-eu-west-1.md).
+
+### Historique du blocage — Free Plan AWS (eu-west-3)
+
+Sur le compte utilisé pour ce projet, `terraform apply` échouait sur
+`aws_db_instance.this` en `eu-west-3` avec :
 
 ```
 InstanceQuotaExceeded: You reached the maximum number of instances
@@ -73,12 +82,7 @@ Sur ce compte, les 2 instances RDS existantes (`insighthub-dev-postgres`,
 `jobzyn-dev-postgres`) appartiennent à d'autres projets actifs et ne peuvent
 pas être libérées pour ce projet.
 
-**Ce module reste écrit et prêt** : dès que le blocage est levé (upgrade du
-compte vers un plan payant standard, ou libération d'un slot), un simple
-`terraform plan` proposera de créer l'unique ressource manquante — aucun
-changement de code nécessaire.
-
-**Vérifié le 2026-08-16** : le blocage n'est pas propre à Terraform. Un appel
+**Le blocage n'était pas propre à Terraform.** Un appel
 direct `aws rds create-db-instance` avec les mêmes paramètres échoue à
 l'identique :
 

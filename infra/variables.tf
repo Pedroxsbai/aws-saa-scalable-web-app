@@ -58,7 +58,7 @@ variable "extra_tags" {
 variable "region" {
   description = "Région AWS de déploiement."
   type        = string
-  default     = "eu-west-3" # Paris — proximité et conformité RGPD
+  default     = "eu-west-1" # Irlande — UE, conforme RGPD. Choisie sur eu-west-3 pour le quota RDS "Free Plan" (cf. ADR-002)
 
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]$", var.region))

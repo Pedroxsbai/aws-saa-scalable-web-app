@@ -17,7 +17,7 @@ variable "vpc_cidr" {
 }
 
 variable "azs" {
-  description = "Zones de disponibilité complètes, ex. [\"eu-west-3a\", \"eu-west-3b\"]. L'ordre fait foi : l'index 0 est l'AZ qui héberge le NAT unique."
+  description = "Zones de disponibilité complètes, ex. [\"eu-west-1a\", \"eu-west-1b\"]. L'ordre fait foi : l'index 0 est l'AZ qui héberge le NAT unique."
   type        = list(string)
 }
 

@@ -81,7 +81,7 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
 
   # AZ cibles, construites depuis la région et les suffixes demandés.
-  # ex. ["eu-west-3a", "eu-west-3b"]
+  # ex. ["eu-west-1a", "eu-west-1b"]
   azs = [for s in var.az_suffixes : "${var.region}${s}"]
 
   # Tags spécifiques venant s'ajouter aux default_tags du provider. Passer par
