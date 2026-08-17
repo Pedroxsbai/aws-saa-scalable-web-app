@@ -166,10 +166,15 @@ flowchart TB
     class CF,WAF disabled
 ```
 
-Reflète l'état **réellement déployé** (profil économique) ; WAF et
-CloudFront sont écrits mais désactivés par défaut, marqués en pointillés
-plutôt qu'omis. Diagramme source, plus schéma détaillé du pipeline CI/CD :
-[`docs/diagrams/architecture.md`](docs/diagrams/architecture.md).
+Reflète le profil économique par défaut du code (WAF et CloudFront en
+pointillés = désactivés par défaut, `enable_waf`/`enable_cloudfront`).
+**CloudFront est actuellement activé sur ce déploiement** pour démonstration
+(`enable_cloudfront = true` dans un `terraform.tfvars` local, non commité —
+le défaut du code reste `false`), et vérifié réellement : un fichier déposé
+dans le bucket d'assets est servi via CloudFront (`200`), tandis que l'accès
+direct au bucket S3 est refusé (`403 AccessDenied`) — preuve que l'Origin
+Access Control fonctionne. Diagramme source, plus schéma détaillé du
+pipeline CI/CD : [`docs/diagrams/architecture.md`](docs/diagrams/architecture.md).
 
 Le trafic entre par un **Application Load Balancer** placé dans les subnets
 publics, protégé optionnellement par un **Web ACL WAFv2** portant les règles
@@ -462,10 +467,11 @@ pas déclenché de montée en charge. Passer à 2 restaure la HA démontrée à
 l'examen, au prix de ~7,50 USD/mois supplémentaires.
 
 **WAF et CloudFront désactivés par défaut.** `enable_waf = false` (module
-`compute`, code déjà écrit, prêt à activer via `terraform.tfvars`) et
-`enable_cloudfront = false` (module `edge`, à écrire en session 4) : aucune
-des deux ne tourne par défaut, pour garder le profil économique sous les
-~30 USD/mois.
+`compute`) et `enable_cloudfront = false` (module `edge`) par défaut, pour
+garder le profil économique sous les ~30 USD/mois. Les deux sont écrits et
+opérationnels — CloudFront a été activé et vérifié réellement pour
+démonstration (fichier servi via CloudFront, accès S3 direct refusé, cf.
+section Architecture) — mais restent désactivés dans le code livré.
 
 **RDS mono-AZ par défaut.** Le basculement Multi-AZ est le mécanisme de HA que
 la certification met le plus en avant, mais il double le coût de la base.
